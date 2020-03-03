@@ -1,0 +1,1 @@
+http://geo.vliz.be:80/geoserver/wfs?request=getfeature&service=wfs&version=1.0.0&typename=World:worldglwd1&outputformat=SHAPE-ZIP&filter=%3CPropertyIsEqualTo%3E%3CPropertyName%3Eglwd_id%3C%2FPropertyName%3E%3CLiteral%3E8%3C%2FLiteral%3E%3C%2FPropertyIsEqualTo%3E

@@ -1,0 +1,10 @@
+pandas
+fiona
+shapely
+pyproj
+rtree
+geopandas
+netcdf4
+basemap
+numpy
+scikit-learn
