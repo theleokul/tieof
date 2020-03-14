@@ -1,5 +1,5 @@
 {
-    "shape_file": "/Users/leonidkulikov/dev/mipt/ml/shapes/baikal/baikal.shp",
-    "raw_data_dir": "/Users/leonidkulikov/dev/mipt/ml/2019",
+    "shape_file": "shapes/baikal/baikal.shp",
+    "raw_data_dir": "2019",
     "investigated_obj": "chlor_a"
 }

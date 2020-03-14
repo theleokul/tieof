@@ -1,6 +1,5 @@
 import os
 import re
-import subprocess
 
 from tqdm import tqdm
 import netCDF4 as nc
@@ -10,18 +9,22 @@ import numpy as np
 import numpy.ma as ma
 from sklearn import neighbors
 from pathlib import Path
-from scipy.io import savemat
+from oct2py import octave
 
-import utils
+from . import utils
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+gher_scripts_dir = os.path.join(base_dir, 'gher_scripts')
+octave.addpath(gher_scripts_dir)
 
 
-class DataPreparer:
+class DataCook:
     """
-        Class that cares about data preparation for model to be fed
+        Class that cares about data cooking before fitting with gher dineof
     """
     def __init__(self, shape_file, raw_data_dir, investigated_obj):
-        self.shape_file = shape_file
-        self.raw_data_dir = raw_data_dir
+        self.shape_file = os.path.abspath(shape_file)
+        self.raw_data_dir = os.path.abspath(raw_data_dir)
         self.investigated_obj = investigated_obj
 
     def get_static_grid_path(self):
@@ -36,7 +39,7 @@ class DataPreparer:
     def get_timeline_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'timeline.{extension}')
 
-    def get_unified_path(self, extension='npy'):
+    def get_unified_tensor_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'unified.{extension}')
 
     def touch_static_grid(self, resolution=1):
@@ -63,9 +66,17 @@ class DataPreparer:
         static_grid_dir = self.get_static_grid_path()
         os.makedirs(static_grid_dir, exist_ok=True)
 
-        np.save(os.path.join(static_grid_dir, 'lons.npy'), lons)
-        np.save(os.path.join(static_grid_dir, 'lats.npy'), lats)
-        np.save(os.path.join(static_grid_dir, 'mask.npy'), mask)
+        lons_path = os.path.join(static_grid_dir, 'lons.npy')
+        np.save(lons_path, lons)
+        print(f'lons.npy are created here: {lons_path}')
+
+        lats_path = os.path.join(static_grid_dir, 'lats.npy')
+        np.save(lats_path, lats)
+        print(f'lats.npy are created here: {lats_path}')
+
+        mask_path = os.path.join(static_grid_dir, 'mask.npy')
+        np.save(mask_path, mask)
+        print(f'mask.npy is created here: {mask_path}')
 
     def read_raw_data_files(self):
         data_files = utils.ls(self.raw_data_dir)
@@ -114,12 +125,15 @@ class DataPreparer:
         int_inv_obj_mask = np.logical_or(static_lons.mask, int_X_mask)
         int_inv_obj = knr.fit(raw_X, raw_y).predict(T)
         int_inv_obj = int_inv_obj.reshape(static_lons.shape)
+        # int_inv_obj_mask: 1 - land, 0 - water
         int_inv_obj[int_inv_obj_mask] = np.nan
 
         return int_inv_obj
 
-    def touch_interpolated_data(self, fullness_threshold=None, remove_low_fullness=False):
-        """Interpolate raw data in raw_data_dir to static grid into raw_data_dir/interpolated"""
+    def touch_interpolated_data(self, fullness_threshold, remove_low_fullness):
+        """
+            Interpolate raw data in raw_data_dir to static grid into raw_data_dir/interpolated
+        """
         static_grid_dir = self.get_static_grid_path()
         utils.guard(os.path.isdir(static_grid_dir), 'static_grid_dir is not created')
 
@@ -145,20 +159,24 @@ class DataPreparer:
                 fullness = utils.calculate_fullness(int_inv_obj, mask)
             except:
                 fullness = 0
+                # Fill int_inv_obj with unknown values, i.e. nan
+                int_inv_obj = np.full(raw_lons.shape, np.nan)
 
-            if fullness_threshold is not None and fullness < fullness_threshold:
+            if fullness_threshold and fullness < fullness_threshold:
                 if remove_low_fullness:
                     os.remove(raw_data_file)
                 continue
 
             np.save(os.path.join(interpolated_dir, f'{raw_data_file_stem}.npy'), int_inv_obj)
 
-    def preserve_best_day_only(self, day_range=range(151, 244)):  # (151, 244) - summer
-        """
-        Preserves the best matrix for one day.
+        print(f'Interpolation is completed, interpolated data is here: {interpolated_dir}')
 
-        Filenames in interpolated should be in format *YYYYDDD*.
-        .npy extension is only supported.
+    def preserve_best_day_only(self, day_range):
+        """
+            Preserves the best matrix for one day.
+
+            Filenames in interpolated should be in format *YYYYDDD*.
+            .npy extension is only supported.
         """
         static_grid_dir_path = self.get_static_grid_path()
         utils.guard(os.path.isdir(static_grid_dir_path), 'Run touch_static_grid() before this.')
@@ -200,7 +218,8 @@ class DataPreparer:
 
     def touch_unified_tensor(self, move_new_axis_to_end=True):
         """
-        Unify all files from interpolated in 1 tensor and put it in the same directory as unified.npy
+            Unify all files from interpolated in 1 tensor and put it
+            in the same directory as unified.npy
         """
         int_data_dir_path = self.get_interpolated_path()
         utils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
@@ -208,22 +227,25 @@ class DataPreparer:
         data_files = [f for f in utils.ls(int_data_dir_path) if 'unified' not in f and 'timeline' not in f]
         utils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]), 'Files in dir_path should have .npy ext')
 
-        unified_data = []
+        unified_tensor = []
         for f in data_files:
             d = np.load(f)
-            unified_data.append(d)
-        unified_data = np.array(unified_data)
+            unified_tensor.append(d)
+        unified_tensor = np.array(unified_tensor)
 
         if move_new_axis_to_end:
-            unified_data = np.moveaxis(unified_data, 0, -1)
+            unified_tensor = np.moveaxis(unified_tensor, 0, -1)
 
-        np.save(os.path.join(int_data_dir_path, 'unified.npy'), unified_data)
+        unified_tensor_path = os.path.join(int_data_dir_path, 'unified_tensor.npy')
+        np.save(unified_tensor_path, unified_tensor)
+        print(f'unified_tensor.npy is created here: {unified_tensor_path}')
 
     def touch_timeline(self):
         """
-        Touch timeline tensor in interpolated
+            Touch timeline tensor in interpolated
 
-        It is supposed that times are included in filenames of interpolated in format *YYYYDDD*
+            It is supposed that times are included in filenames
+            of interpolated in format *YYYYDDD*
         """
         int_data_dir_path = self.get_interpolated_path()
         utils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
@@ -236,60 +258,33 @@ class DataPreparer:
                 timeline.append(m.group(1))
 
         timeline = np.array([timeline], dtype=np.float)
-        np.save(os.path.join(int_data_dir_path, 'timeline.npy'), timeline)
 
-    def npy_to_mat(self, npy_path, mat_path):
+        timeline_path = os.path.join(int_data_dir_path, 'timeline.npy')
+        np.save(timeline_path, timeline)
+        print(f'timeline.npy is created here: {timeline_path}')
+
+    def npy_to_dat(self, npy_path, dat_path):
         """
-        Transform data from .npy to .mat
+            Transform data from .npy to .dat
 
-        npy_path - can be a regular path.
-        mat_path - can be a regular path or a directory.
+            npy_path - can be a regular path.
+            dat_path - can be a regular path or a directory.
         """
         if os.path.isfile(npy_path):
             utils.guard(npy_path.split('.')[-1] == 'npy', 'npy_path should have .npy ext')
             d = np.load(npy_path)
 
-            if mat_path.split('.')[-1] == 'mat':
-                # mat_path is a regular path
-                savemat(mat_path, {'data': d})
-            else:
-                # mat_path is a directory
-                os.makedirs(mat_path, exist_ok=True)
-                savemat(os.path.join(mat_path, f'{Path(npy_path).stem}.mat'), {'data': d})
-        elif os.path.isdir(npy_path):
-            raise Exception('npy_to_mat for directories is not implemented')
-        else:
-            raise Exception('npy_path should be either directory or regular file')
-
-    def mat_to_dat(self, mat_path, dat_path):
-        """
-        Transform data from .mat to .dat
-
-        mat_path - can be a regular path.
-        dat_path - can be a regular path or a directory.
-        """
-        def save_as_dat(correct_mat_path, correct_dat_path):
-            subprocess.call(
-                [
-                    'octave',
-                    '--eval',
-                    "cd('gher_dineof_scripts')",
-                    f"dataset = load('{correct_mat_path}'); \
-                    gwrite('{correct_dat_path}', dataset.data);"
-                ]
-            )
-
-        if os.path.isfile(mat_path):
-            utils.guard(mat_path.split('.')[-1] == 'mat', 'mat_path should have .mat ext')
-
             if dat_path.split('.')[-1] == 'dat':
+                pass
                 # dat_path is a regular path
-                save_as_dat(mat_path, dat_path)
+                octave.gwrite(dat_path, d)
             else:
                 # dat_path is a directory
                 os.makedirs(dat_path, exist_ok=True)
-                save_as_dat(mat_path, os.path.join(dat_path, f'{Path(mat_path).stem}.dat'))
-        elif os.path.isdir(mat_path):
-            raise Exception('mat_to_dat for directories is not implemented')
+                dat_path = os.path.join(dat_path, f'{Path(npy_path).stem}.dat')
+                print(dat_path)
+                octave.gwrite(dat_path, d)
+        elif os.path.isdir(npy_path):
+            raise Exception('npy_to_dat for directories is not implemented')
         else:
-            raise Exception('mat_path should be either directory or regular file')
+            raise Exception('npy_path should be either directory or regular file')

@@ -36,7 +36,7 @@ def ls(dir_path, root_replacer=None):
 
 def calculate_fullness(X, mask):
     """
-    Calculate emptiness E (0<=E<=1)
+    Calculate fullness F (0<=F<=1)
 
     X - 2D matrix with NaN for missing points
     Mask - 2D matrix with 1 - lake, 0 - land
