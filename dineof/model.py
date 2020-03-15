@@ -28,7 +28,7 @@ def fit(
 
     dc = DataCook(shape_file, raw_data_dir, investigated_obj)
 
-    dc.build_static_grid()
+    dc.touch_static_grid()
     dc.npy_to_dat(dc.get_static_grid_mask_path(extension='npy'), dc.get_static_grid_path())
 
     dc.touch_interpolated_data(fullness_threshold, remove_low_fullness)

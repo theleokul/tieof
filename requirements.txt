@@ -1,10 +1,8 @@
-pandas
-fiona
+pathlib
 shapely
-pyproj
-rtree
+scikit-learn
+numpy
+tqdm
 geopandas
 netcdf4
-basemap
-numpy
-scikit-learn
+oct2py
