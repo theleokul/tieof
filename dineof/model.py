@@ -1,4 +1,3 @@
-import os
 import json
 import subprocess
 
@@ -10,7 +9,8 @@ def fit(
     fullness_threshold=0.0,
     remove_low_fullness=False,
     force_static_grid_touch=False,
-    best_day_range_to_preserve=(151, 244)  # (151, 244) - summers
+    day_range_to_preserve=(151, 244),  # (151, 244) - summer
+    keep_only_best_day=True
 ):
     """
         Fits the dineof model
@@ -35,10 +35,13 @@ def fit(
                   dc.get_static_grid_path(),
                   force_static_grid_touch)
 
+    if day_range_to_preserve:
+        dc.preserve_day_range_only(day_range_to_preserve)
+
     dc.touch_interpolated_data(fullness_threshold, remove_low_fullness)
 
-    if best_day_range_to_preserve:
-        dc.preserve_best_day_only(best_day_range_to_preserve)
+    if keep_only_best_day:
+        dc.preserve_best_day_only()
 
     dc.touch_unified_tensor()
     dc.npy_to_dat(dc.get_unified_tensor_path(extension='npy'), dc.get_interpolated_path())

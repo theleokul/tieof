@@ -181,7 +181,26 @@ class DataCook:
 
         print(f'Interpolation is completed, interpolated data is here: {interpolated_dir}')
 
-    def preserve_best_day_only(self, day_range):
+    def preserve_day_range_only(self, day_range):
+        data_files = utils.ls(self.raw_data_dir)
+        utils.guard(all(d.split('.')[-1] == 'nc' for d in data_files), 'NetCDF format is only supported format')
+
+        final_data_files = []
+        for day in day_range:
+            #  Choose all files for specific day
+            r_compiler = re.compile(f'^{self.raw_data_dir}/' + r'[a-b]*\d{4}' + f'{day:03d}', re.I)
+            filtered_data_files = list(filter(r_compiler.match, data_files))
+
+            final_data_files.extend(filtered_data_files)
+
+        files_to_del = [f for f in data_files if f not in final_data_files]
+
+        for f in files_to_del:
+            os.remove(f)
+
+        print(f'Day range: {day_range} is only kept in {self.raw_data_dir}.')
+
+    def preserve_best_day_only(self):
         """
             Preserves the best matrix for one day.
 
@@ -198,33 +217,38 @@ class DataCook:
         geo_obj_mask = np.load(mask_path)
 
         data_files = [f for f in utils.ls(int_data_dir_path) if 'unified' not in f and 'timeline' not in f]
-        utils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]), 'Files in dir_path should have .npy ext')
+        utils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]),
+                    'Interpolated chunks in interpolated/ should have .npy ext')
 
         final_data_files = []
-        for day in day_range:
-            #  Choose all files for specific day
+        already_analyzed_days = []
+        for f in data_files:
+            # Pull day from filename
+            day = re.search(f'^{int_data_dir_path}/' + r'[a-b]*\d{4}(\d{3})', f).group(1)
+            if day in already_analyzed_days:
+                continue
+            #  Choose all files for this specific day
             r_compiler = re.compile(f'^{int_data_dir_path}/' + r'[a-b]*\d{4}' + f'{day:03d}', re.I)
             filtered_data_files = list(filter(r_compiler.match, data_files))
-
-            # If no data for that day is provided, skip
-            if not filtered_data_files:
-                continue
 
             datasets = [np.load(f) for f in filtered_data_files]
 
             fullness, best_file = utils.calculate_fullness(datasets[0], geo_obj_mask), filtered_data_files[0]
-            for i, d in enumerate(datasets[1:]):
+            for i, d in enumerate(datasets[1:], 1):
                 new_fullness = utils.calculate_fullness(d, geo_obj_mask)
                 if new_fullness > fullness:
                     fullness = new_fullness
                     best_file = filtered_data_files[i]
 
             final_data_files.append(best_file)
+            already_analyzed_days.append(day)
 
         files_to_del = [f for f in data_files if f not in final_data_files]
 
         for f in files_to_del:
             os.remove(f)
+
+        print(f'Best day is only kept in {int_data_dir_path}.')
 
     def touch_unified_tensor(self, move_new_axis_to_end=True):
         """
