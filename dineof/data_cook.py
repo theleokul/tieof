@@ -42,14 +42,26 @@ class DataCook:
     def get_unified_tensor_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'unified.{extension}')
 
-    def touch_static_grid(self, resolution=1):
+    def touch_static_grid(self, force_static_grid_touch, resolution=1):
         """Generate spatial grid"""
+        static_grid_dir = self.get_static_grid_path()
+        lons_path = os.path.join(static_grid_dir, 'lons.npy')
+        lats_path = os.path.join(static_grid_dir, 'lats.npy')
+        mask_path = os.path.join(static_grid_dir, 'mask.npy')
+
+        if not force_static_grid_touch \
+           and os.path.isfile(lons_path) \
+           and os.path.isfile(lats_path) \
+           and os.path.isfile(mask_path):
+            return
+
         loc = gp.GeoSeries.from_file(self.shape_file)[0]
         lon1, lat1, lon2, lat2 = loc.bounds
 
         # 111 and 65 are approximate number of kilometers per 1 degree of latitude and longitude accordingly
         spar_lat = abs(int((lat2 - lat1) * 111 / resolution))
         spar_lon = abs(int((lon2 - lon1) * 65 / resolution))
+        static_grid_size = spar_lat * spar_lon
 
         lons, lats = np.meshgrid(np.linspace(lon1, lon2, spar_lon), np.linspace(lat2, lat1, spar_lat))
         grid = list(zip(lons.flatten(), lats.flatten()))
@@ -58,23 +70,19 @@ class DataCook:
         mask = np.zeros(shape=(spar_lon * spar_lat), dtype=np.float)
 
         print(f'Forming static grid (shape: {spar_lat}x{spar_lon}).')
-        for i, p in tqdm(enumerate(points)):
+        for i, p in tqdm(enumerate(points), total=static_grid_size):
             if loc.intersects(p):
                 mask[i] = 1
         mask = mask.reshape(spar_lat, spar_lon)
 
-        static_grid_dir = self.get_static_grid_path()
         os.makedirs(static_grid_dir, exist_ok=True)
 
-        lons_path = os.path.join(static_grid_dir, 'lons.npy')
         np.save(lons_path, lons)
         print(f'lons.npy are created here: {lons_path}')
 
-        lats_path = os.path.join(static_grid_dir, 'lats.npy')
         np.save(lats_path, lats)
         print(f'lats.npy are created here: {lats_path}')
 
-        mask_path = os.path.join(static_grid_dir, 'mask.npy')
         np.save(mask_path, mask)
         print(f'mask.npy is created here: {mask_path}')
 
@@ -148,7 +156,9 @@ class DataCook:
         os.makedirs(interpolated_dir, exist_ok=True)
 
         print('Interpolating data.')
-        for raw_lons, raw_lats, raw_inv_obj, raw_data_file in tqdm(self.read_raw_data_files()):
+        raw_data_files_count = len(utils.ls(self.raw_data_dir))
+        for raw_lons, raw_lats, raw_inv_obj, raw_data_file in tqdm(self.read_raw_data_files(),
+                                                                   total=raw_data_files_count):
             raw_data_file_stem = raw_data_file.split('/')[-1]
 
             if os.path.exists(os.path.join(interpolated_dir, f'{raw_data_file_stem}.npy')):
@@ -263,7 +273,7 @@ class DataCook:
         np.save(timeline_path, timeline)
         print(f'timeline.npy is created here: {timeline_path}')
 
-    def npy_to_dat(self, npy_path, dat_path):
+    def npy_to_dat(self, npy_path, dat_path, force_touch=False):
         """
             Transform data from .npy to .dat
 
@@ -275,15 +285,24 @@ class DataCook:
             d = np.load(npy_path)
 
             if dat_path.split('.')[-1] == 'dat':
-                pass
                 # dat_path is a regular path
+
+                # Check of existence
+                if not force_touch and os.path.isfile(dat_path):
+                    return
+
                 octave.gwrite(dat_path, d)
             else:
                 # dat_path is a directory
                 os.makedirs(dat_path, exist_ok=True)
                 dat_path = os.path.join(dat_path, f'{Path(npy_path).stem}.dat')
-                print(dat_path)
+
+                # Check of existences
+                if not force_touch and os.path.isfile(dat_path):
+                    return
+
                 octave.gwrite(dat_path, d)
+            print(f'{Path(dat_path).stem}.dat is created here: {dat_path}')
         elif os.path.isdir(npy_path):
             raise Exception('npy_to_dat for directories is not implemented')
         else:
