@@ -9,31 +9,36 @@ def fit(
     data_desc_path,
     fullness_threshold=0.0,
     remove_low_fullness=False,
-    day_range_to_preserve=(151, 244)  # (151, 244) - summer
+    force_static_grid_touch=False,
+    best_day_range_to_preserve=(151, 244)  # (151, 244) - summers
 ):
     """
         Fits the dineof model
 
         fullness_threshold - minimal proporion of observed data to keep data
         remove_low_fullness - if True: remove raw_inv_obj from raw_data_dir
-        day_range_to_preserve - Deletes all data for days outside of this range
+        force_static_grid_touch - if True: create a static grid if it already exists
+        best_day_range_to_preserve - Delete all data for days outside of this range, keep 1 matrix for day
     """
 
     with open(data_desc_path, 'r') as f:
         data_desc = json.load(f)
 
-    shape_file = os.path.abspath(data_desc['shape_file'])
-    raw_data_dir = os.path.abspath(data_desc['raw_data_dir'])
-    investigated_obj = os.path.abspath(data_desc['investigated_obj'])
+    shape_file = data_desc['shape_file']
+    raw_data_dir = data_desc['raw_data_dir']
+    investigated_obj = data_desc['investigated_obj']
 
     dc = DataCook(shape_file, raw_data_dir, investigated_obj)
 
-    dc.touch_static_grid()
-    dc.npy_to_dat(dc.get_static_grid_mask_path(extension='npy'), dc.get_static_grid_path())
+    dc.touch_static_grid(force_static_grid_touch)
+    dc.npy_to_dat(dc.get_static_grid_mask_path(extension='npy'),
+                  dc.get_static_grid_path(),
+                  force_static_grid_touch)
 
     dc.touch_interpolated_data(fullness_threshold, remove_low_fullness)
 
-    dc.preserve_best_day_only(day_range_to_preserve)
+    if best_day_range_to_preserve:
+        dc.preserve_best_day_only(best_day_range_to_preserve)
 
     dc.touch_unified_tensor()
     dc.npy_to_dat(dc.get_unified_tensor_path(extension='npy'), dc.get_interpolated_path())
