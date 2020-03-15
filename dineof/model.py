@@ -9,7 +9,7 @@ def fit(
     fullness_threshold=0.0,
     remove_low_fullness=False,
     force_static_grid_touch=False,
-    day_range_to_preserve=(151, 244),  # (151, 244) - summer
+    day_range_to_preserve=range(151, 244),  # (151, 244) - summer
     keep_only_best_day=True
 ):
     """

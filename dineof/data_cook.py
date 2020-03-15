@@ -224,7 +224,7 @@ class DataCook:
         already_analyzed_days = []
         for f in data_files:
             # Pull day from filename
-            day = re.search(f'^{int_data_dir_path}/' + r'[a-b]*\d{4}(\d{3})', f).group(1)
+            day = int(re.search(f'^{int_data_dir_path}/' + r'[a-b]*\d{4}(\d{3})', f, re.I).group(1))
             if day in already_analyzed_days:
                 continue
             #  Choose all files for this specific day
