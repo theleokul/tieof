@@ -43,6 +43,6 @@ def calculate_fullness(X, mask):
     """
     X = X[mask.astype(np.bool)]
     data_size = np.count_nonzero(~np.isnan(X))
-    overall_size = np.size(X)
+    overall_size = X.size
 
     return data_size / overall_size

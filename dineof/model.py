@@ -5,7 +5,7 @@ from .data_cook import DataCook
 
 
 def fit(
-    data_desc_path,
+    data_desc_path='data_desc.json',
     fullness_threshold=0.0,
     remove_low_fullness=False,
     force_static_grid_touch=False,

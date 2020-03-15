@@ -6,7 +6,6 @@ import netCDF4 as nc
 import geopandas as gp
 from shapely.geometry import MultiPoint
 import numpy as np
-import numpy.ma as ma
 from sklearn import neighbors
 from pathlib import Path
 from oct2py import octave
@@ -40,7 +39,7 @@ class DataCook:
         return os.path.join(self.get_interpolated_path(), f'timeline.{extension}')
 
     def get_unified_tensor_path(self, extension='npy'):
-        return os.path.join(self.get_interpolated_path(), f'unified.{extension}')
+        return os.path.join(self.get_interpolated_path(), f'unified_tensor.{extension}')
 
     def touch_static_grid(self, force_static_grid_touch, resolution=1):
         """Generate spatial grid"""
@@ -94,47 +93,69 @@ class DataCook:
             ds = nc.Dataset(raw_data_file, mode='r')
 
             nav_group = ds.groups['navigation_data']
+            # Initially data is masked
             lons = nav_group.variables['longitude'][:]
+            # I unmask it for further simpler usage
+            lons = np.ma.getdata(lons)
             lats = nav_group.variables['latitude'][:]
+            lats = np.ma.getdata(lats)
 
             geo_group = ds.groups['geophysical_data']
             inv_obj = geo_group.variables[self.investigated_obj][:]
 
-            ma_lons = ma.array(lons, mask=inv_obj.mask, fill_value=inv_obj.fill_value)
-            ma_lats = ma.array(lats, mask=inv_obj.mask, fill_value=inv_obj.fill_value)
+            # Initially mask consists of: False - lake, True - land
+            # I want: True - lake, False - land
+            inv_obj_mask = np.invert(inv_obj.mask)
 
-            yield ma_lons, ma_lats, inv_obj, raw_data_file
+            # Unmask and place nan in land's points
+            inv_obj.fill_value = np.nan
+            inv_obj = inv_obj.filled()
 
-    def interpolate_raw_data_obj(self, raw_lons, raw_lats, raw_inv_obj, static_lons, static_lats):
+            yield lons, lats, inv_obj, inv_obj_mask, raw_data_file
+
+    def interpolate_raw_data_obj(self, raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask):
+        # Static grid
+        static_grid_dir = self.get_static_grid_path()
+        static_lons = np.load(os.path.join(static_grid_dir, 'lons.npy'))
+        static_lats = np.load(os.path.join(static_grid_dir, 'lats.npy'))
+        static_mask = np.load(os.path.join(static_grid_dir, 'mask.npy')).astype(np.bool)
+
         # Raw data from satellite
-        raw_X = np.c_[raw_lons.compressed(), raw_lats.compressed()]
-        raw_y = raw_inv_obj.compressed()
+        raw_lons_known = raw_lons[raw_inv_obj_mask]
+        raw_lats_known = raw_lats[raw_inv_obj_mask]
+        raw_lons_lats_known = np.c_[raw_lons_known, raw_lats_known]
+        raw_inv_obj_known = raw_inv_obj[raw_inv_obj_mask]
 
-        # Grid on which we will interpolate (np.c_ implicitly removes mask and acts like np.getdata)
-        int_X = np.c_[static_lons.flatten(), static_lats.flatten()]
-        int_X_mask = np.ones(shape=(int_X.shape[0]), dtype=np.bool)
+        # Grid on which we will interpolate
+        int_lons_lats = np.c_[static_lons.flatten(), static_lats.flatten()]
+        int_inv_obj_mask = np.zeros(shape=(int_lons_lats.shape[0]), dtype=np.bool)
 
         # Defining in which radius to interpolate
-        min_grid_distance_lon = abs(ma.getdata(static_lons)[0][0] - ma.getdata(static_lons)[0][1])
-        min_grid_distance_lat = abs(ma.getdata(static_lats)[0][0] - ma.getdata(static_lats)[1][0])
+        min_grid_distance_lon = abs(static_lons[0][0] - static_lons[0][1])
+        min_grid_distance_lat = abs(static_lats[0][0] - static_lats[1][0])
         min_grid_distance = utils.floor_float(np.min([min_grid_distance_lat, min_grid_distance_lon]))
 
         # Select points to be interpolated that lie in min grid distance radius from raw data
-        tree = neighbors.KDTree(raw_X, leaf_size=2)
-        for i, x in enumerate(int_X):
+        tree = neighbors.KDTree(raw_lons_lats_known, leaf_size=2)
+        for i, int_lon_lat in enumerate(int_lons_lats):
             # If near static node there are raw nodes => we use such static node
-            if tree.query_radius(x.reshape(1, -1), r=min_grid_distance, count_only=True)[0] > 0:
-                int_X_mask[i] = False
-        int_X_mask = int_X_mask.reshape(static_lons.shape)
+            if tree.query_radius(int_lon_lat.reshape(1, -1), r=min_grid_distance, count_only=True)[0] > 0:
+                int_inv_obj_mask[i] = True
+
+        int_inv_obj_mask = int_inv_obj_mask.reshape(static_lons.shape)
 
         # Interpolate filtered nodes, find value based on raw data
         knr = neighbors.KNeighborsRegressor(n_neighbors=3, weights='distance')
-        T = np.c_[ma.getdata(static_lons).flatten(), ma.getdata(static_lats).flatten()]
-        int_inv_obj_mask = np.logical_or(static_lons.mask, int_X_mask)
-        int_inv_obj = knr.fit(raw_X, raw_y).predict(T)
-        int_inv_obj = int_inv_obj.reshape(static_lons.shape)
-        # int_inv_obj_mask: 1 - land, 0 - water
-        int_inv_obj[int_inv_obj_mask] = np.nan
+        knr.fit(raw_lons_lats_known, raw_inv_obj_known)
+
+        # static_mask - shape of the lake, int_inv_obj_mask - points where we can interpolate
+        int_inv_obj_mask = np.logical_and(static_mask, int_inv_obj_mask)
+        int_lons_lats_known = int_lons_lats[int_inv_obj_mask.flatten()]
+        int_inv_obj_known = knr.predict(int_lons_lats_known)
+
+        # Reconstruct int_inv_obj
+        int_inv_obj = np.full(static_lons.shape, np.nan)
+        int_inv_obj[int_inv_obj_mask] = int_inv_obj_known
 
         return int_inv_obj
 
@@ -142,35 +163,25 @@ class DataCook:
         """
             Interpolate raw data in raw_data_dir to static grid into raw_data_dir/interpolated
         """
-        static_grid_dir = self.get_static_grid_path()
-        utils.guard(os.path.isdir(static_grid_dir), 'static_grid_dir is not created')
-
-        static_lons = np.load(os.path.join(static_grid_dir, 'lons.npy'))
-        static_lats = np.load(os.path.join(static_grid_dir, 'lats.npy'))
-        mask = np.load(os.path.join(static_grid_dir, 'mask.npy'))
-
-        static_lons = ma.array(static_lons, mask=~(mask.astype(np.bool)), dtype=np.float)
-        static_lats = ma.array(static_lats, mask=~(mask.astype(np.bool)), dtype=np.float)
-
+        mask = np.load(os.path.join(self.get_static_grid_path(), 'mask.npy')).astype(np.bool)
         interpolated_dir = self.get_interpolated_path()
         os.makedirs(interpolated_dir, exist_ok=True)
 
         print('Interpolating data.')
         raw_data_files_count = len(utils.ls(self.raw_data_dir))
-        for raw_lons, raw_lats, raw_inv_obj, raw_data_file in tqdm(self.read_raw_data_files(),
-                                                                   total=raw_data_files_count):
-            raw_data_file_stem = raw_data_file.split('/')[-1]
+        for raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask, raw_data_file in tqdm(self.read_raw_data_files(),
+                                                                                     total=raw_data_files_count):
+            raw_data_file_stem = Path(raw_data_file).stem
 
             if os.path.exists(os.path.join(interpolated_dir, f'{raw_data_file_stem}.npy')):
                 continue
 
             try:
-                int_inv_obj = self.interpolate_raw_data_obj(raw_lons, raw_lats, raw_inv_obj, static_lons, static_lats)
+                int_inv_obj = self.interpolate_raw_data_obj(raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask)
                 fullness = utils.calculate_fullness(int_inv_obj, mask)
             except:
                 fullness = 0
-                # Fill int_inv_obj with unknown values, i.e. nan
-                int_inv_obj = np.full(raw_lons.shape, np.nan)
+                int_inv_obj = np.full(mask.shape, np.nan)
 
             if fullness_threshold and fullness < fullness_threshold:
                 if remove_low_fullness:
