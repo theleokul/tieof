@@ -408,8 +408,9 @@ class DataCook:
             rec = {self.rec}
             eof = {self.eof}
             norm = {self.norm}
-            Output = '{self.output_dir}'
-            results = ['{self.result_path}']
+            Output = '{os.path.abspath(self.output_dir)}'
+            results = ['{os.path.join(os.path.abspath(self.output_dir),
+                         self.get_unified_tensor_path(extension='dat').split('/')[-1])}']
             seed = {self.seed}
         """
 

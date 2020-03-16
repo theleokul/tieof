@@ -69,8 +69,10 @@ class Dineof:
 
         # Save output of GHER DINEOF in .npy format
         npy_result_path = os.path.abspath(self.result_path)
-        dat_result_path = os.path.join(os.path.abspath(self.output_dir),
-                                       f'{Path(npy_result_path).stem}.dat')
+        dat_result_path = os.path.join(
+            os.path.abspath(self.output_dir),
+            f'{self.dc.get_unified_tensor_path(extension="dat").split("/")[-1]}'
+        )
         DataCook.dat_to_npy(dat_result_path, npy_result_path)
 
     def plot(self,
