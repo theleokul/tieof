@@ -390,3 +390,27 @@ class DataCook:
             raise Exception('dat_to_npy for directories is not implemented')
         else:
             raise Exception('dat_path should be either directory or regular file')
+
+    def construct_dineof_init(self):
+        """Touch dineof.init and return it's temporary filename"""
+        dineof_init = f"""
+            data = ['{os.path.join(self.get_interpolated_path(), 'unified_tensor.dat')}']
+            mask = ['{self.get_static_grid_mask_path(extension='dat')}']
+            time = '{self.get_timeline_path(extension='dat')}'
+            alpha = {self.alpha}
+            numit = {self.numit}
+            nev = {self.nev}
+            neini = {self.neini}
+            ncv = {self.ncv}
+            tol = {self.tol}
+            nitemax = {self.nitemax}
+            toliter = {self.toliter}
+            rec = {self.rec}
+            eof = {self.eof}
+            norm = {self.norm}
+            Output = '{self.output_dir}'
+            results = ['{self.result_path}']
+            seed = {self.seed}
+        """
+
+        return bytes(dineof_init, encoding='utf-8')
