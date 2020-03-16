@@ -3,9 +3,6 @@ import json
 import subprocess
 
 from pathlib import Path
-import numpy as np
-from mpl_toolkits.basemap import Basemap
-import matplotlib.pyplot as plt
 
 from .data_cook import DataCook
 
@@ -69,39 +66,3 @@ class Dineof:
         dat_result_path = os.path.join(os.path.abspath(self.output_dir),
                                        f'{Path(npy_result_path).stem}.dat')
         DataCook.dat_to_npy(dat_result_path, npy_result_path)
-
-    def plot(self,
-             day,
-             basemap_width=6 * 1E5,
-             basemap_height=6 * 1E5,
-             lon_0=106.5,
-             lat_0=53.5,
-             bar_label='chlor, mg * m^-3',
-             clim=(None, None)):
-        unified_tensor = np.load(os.path.abspath(self.result_path))
-        timeline = self.dc.get_timeline()[0]
-        day_index = np.where(timeline == day)[0][0]
-        inv_obj = unified_tensor[:, :, day_index]
-
-        # Load static grid
-        lons, lats, _ = self.dc.get_lons_lats_mask()
-
-        # Prepare background of the plot
-        basemap = Basemap(projection='lcc', resolution='i',
-                          width=basemap_width, height=basemap_height,
-                          lon_0=lon_0, lat_0=lat_0)
-
-        shape_filename = os.path.join(os.path.dirname(self.shape_file_path),
-                                      Path(self.shape_file_path).stem)
-        basemap.readshapefile(shape_filename, name=shape_filename)
-
-        # Plot inv_obj data
-        xi, yi = basemap(lons, lats)
-        basemap.pcolor(xi, yi, inv_obj, vmin=clim[0], vmax=clim[1])
-
-        # Display colorbar
-        cbar = basemap.colorbar()
-        cbar.ax.get_yaxis().labelpad = 10
-        cbar.ax.set_ylabel(bar_label, rotation=90)
-
-        plt.show()
