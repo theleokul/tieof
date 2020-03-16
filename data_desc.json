@@ -1,5 +1,9 @@
 {
-    "shape_file": "shapes/baikal/baikal.shp",
-    "raw_data_dir": "2019",
-    "investigated_obj": "chlor_a"
+    "dineof_executer": "/home/kulikov/dineof-3.0/dineof",
+    "dineof_init_path": "/mss3/baikal/kulikov/2018/dineof.init",
+    "investigated_obj": "chlor_a",
+    "shape_file_path": "shapes/baikal/baikal.shp",
+    "raw_data_dir": "2019/Input",
+    "output_dir": "2018",
+    "result_path": "2018/unified_tensor_filled.npy"
 }

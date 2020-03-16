@@ -32,11 +32,23 @@ class DataCook:
     def get_static_grid_mask_path(self, extension='npy'):
         return os.path.join(self.get_static_grid_path(), f'mask.{extension}')
 
+    def get_lons_lats_mask(self):
+        grid_path = self.get_static_grid_path()
+        lons = np.load(os.path.join(grid_path, 'lons.npy'))
+        lats = np.load(os.path.join(grid_path, 'lats.npy'))
+        mask = np.load(os.path.join(grid_path, 'mask.npy'))
+
+        return lons, lats, mask
+
     def get_interpolated_path(self):
         return os.path.join(self.raw_data_dir, 'interpolated')
 
     def get_timeline_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'timeline.{extension}')
+
+    def get_timeline(self):
+        timeline = np.load(self.get_timeline_path())
+        return timeline
 
     def get_unified_tensor_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'unified_tensor.{extension}')
@@ -308,7 +320,8 @@ class DataCook:
         np.save(timeline_path, timeline)
         print(f'timeline.npy is created here: {timeline_path}')
 
-    def npy_to_dat(self, npy_path, dat_path, force_touch=False):
+    @staticmethod
+    def npy_to_dat(npy_path, dat_path, force_touch=False):
         """
             Transform data from .npy to .dat
 
@@ -342,3 +355,38 @@ class DataCook:
             raise Exception('npy_to_dat for directories is not implemented')
         else:
             raise Exception('npy_path should be either directory or regular file')
+
+    @staticmethod
+    def dat_to_npy(dat_path, npy_path, force_touch=False):
+        """
+            Transform data from .dat to .npy
+
+            dat_path - can be a regular path.
+            npy_path - can be a regular path or a directory.
+        """
+        if os.path.isfile(dat_path):
+            if npy_path.split('.')[-1] == 'npy':
+                # npy_path is a regular path
+
+                # Check of existence
+                if not force_touch and os.path.isfile(npy_path):
+                    return
+
+                d = octave.gread(dat_path)
+                np.save(npy_path, d)
+            else:
+                # npy_path is a directory
+                os.makedirs(npy_path, exist_ok=True)
+                npy_path = os.path.join(npy_path, f'{Path(dat_path).stem}.npy')
+
+                # Check of existences
+                if not force_touch and os.path.isfile(npy_path):
+                    return
+
+                d = octave.gread(dat_path)
+                np.save(npy_path, d)
+            print(f'{Path(npy_path).stem}.npy is created here: {npy_path}')
+        elif os.path.isdir(npy_path):
+            raise Exception('dat_to_npy for directories is not implemented')
+        else:
+            raise Exception('dat_path should be either directory or regular file')

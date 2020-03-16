@@ -1,69 +1,107 @@
+import os
 import json
 import subprocess
+
+from pathlib import Path
+import numpy as np
+from mpl_toolkits.basemap import Basemap
+import matplotlib.pyplot as plt
 
 from .data_cook import DataCook
 
 
-def fit(
-    data_desc_path='data_desc.json',
-    fullness_threshold=0.0,
-    remove_low_fullness=False,
-    force_static_grid_touch=False,
-    day_range_to_preserve=range(151, 244),  # (151, 244) - summer
-    keep_only_best_day=True
-):
-    """
-        Fits the dineof model
+class Dineof:
+    def __init__(self, data_desc_path='data_desc.json'):
+        with open(data_desc_path, 'r') as f:
+            data_desc = json.load(f)
 
-        fullness_threshold - minimal proporion of observed data to keep data
-        remove_low_fullness - if True: remove raw_inv_obj from raw_data_dir
-        force_static_grid_touch - if True: create a static grid if it already exists
-        best_day_range_to_preserve - Delete all data for days outside of this range, keep 1 matrix for day
-    """
+        for k, v in data_desc.items():
+            setattr(self, k, v)
 
-    with open(data_desc_path, 'r') as f:
-        data_desc = json.load(f)
+        self.dc = DataCook(self.shape_file_path, self.raw_data_dir, self.investigated_obj)
 
-    shape_file = data_desc['shape_file']
-    raw_data_dir = data_desc['raw_data_dir']
-    investigated_obj = data_desc['investigated_obj']
+    def fit(
+        self,
+        fullness_threshold=0.0,
+        remove_low_fullness=False,
+        force_static_grid_touch=False,
+        day_range_to_preserve=range(151, 244),  # (151, 244) - summer
+        keep_only_best_day=True
+    ):
+        """
+            Fits the dineof model
 
-    dc = DataCook(shape_file, raw_data_dir, investigated_obj)
+            fullness_threshold - minimal proporion of observed data to keep data
+            remove_low_fullness - if True: remove raw_inv_obj from raw_data_dir
+            force_static_grid_touch - if True: create a static grid if it already exists
+            best_day_range_to_preserve - Delete all data for days outside of this range, keep 1 matrix for day
+        """
+        self.dc.touch_static_grid(force_static_grid_touch)
+        DataCook.npy_to_dat(self.dc.get_static_grid_mask_path(extension='npy'),
+                            self.dc.get_static_grid_path(),
+                            force_static_grid_touch)
 
-    dc.touch_static_grid(force_static_grid_touch)
-    dc.npy_to_dat(dc.get_static_grid_mask_path(extension='npy'),
-                  dc.get_static_grid_path(),
-                  force_static_grid_touch)
+        if day_range_to_preserve:
+            self.dc.preserve_day_range_only(day_range_to_preserve)
 
-    if day_range_to_preserve:
-        dc.preserve_day_range_only(day_range_to_preserve)
+        self.dc.touch_interpolated_data(fullness_threshold, remove_low_fullness)
 
-    dc.touch_interpolated_data(fullness_threshold, remove_low_fullness)
+        if keep_only_best_day:
+            self.dc.preserve_best_day_only()
 
-    if keep_only_best_day:
-        dc.preserve_best_day_only()
+        self.dc.touch_unified_tensor()
+        DataCook.npy_to_dat(self.dc.get_unified_tensor_path(extension='npy'),
+                            self.dc.get_interpolated_path())
 
-    dc.touch_unified_tensor()
-    dc.npy_to_dat(dc.get_unified_tensor_path(extension='npy'), dc.get_interpolated_path())
+        self.dc.touch_timeline()
+        DataCook.npy_to_dat(self.dc.get_timeline_path(extension='npy'),
+                            self.dc.get_interpolated_path())
 
-    dc.touch_timeline()
-    dc.npy_to_dat(dc.get_timeline_path(extension='npy'), dc.get_interpolated_path())
+    def predict(self):
+        # TODO: dineof_init_path generation based on data_desc_path
+        subprocess.call([
+            f'{self.dineof_executer}',
+            f'{self.dineof_init_path}'
+        ])
 
+        # Save output of GHER DINEOF in .npy format
+        npy_result_path = os.path.abspath(self.result_path)
+        dat_result_path = os.path.join(os.path.abspath(self.output_dir),
+                                       f'{Path(npy_result_path).stem}.dat')
+        DataCook.dat_to_npy(dat_result_path, npy_result_path)
 
-def predict(dineof_executer, dineof_init_path):
-    subprocess.call([
-        f'{dineof_executer}',
-        f'{dineof_init_path}'
-    ])
+    def plot(self,
+             day,
+             basemap_width=6 * 1E5,
+             basemap_height=6 * 1E5,
+             lon_0=106.5,
+             lat_0=53.5,
+             bar_label='chlor, mg * m^-3',
+             clim=(None, None)):
+        unified_tensor = np.load(os.path.abspath(self.result_path))
+        timeline = self.dc.get_timeline()[0]
+        day_index = np.where(timeline == day)[0][0]
+        inv_obj = unified_tensor[:, :, day_index]
 
+        # Load static grid
+        lons, lats, _ = self.dc.get_lons_lats_mask()
 
-def fit_predict(
-    data_desc_path,
-    dineof_executer,
-    dineof_init_path,
-    fullness_threshold=0.0,
-    remove_low_fullness=False,
-    day_range_to_preserve=(151, 244)  # (151, 244) - summer
-):
-    fit(data_desc_path, fullness_threshold, remove_low_fullness, day_range_to_preserve)
-    predict(dineof_executer, dineof_init_path)
+        # Prepare background of the plot
+        basemap = Basemap(projection='lcc', resolution='i',
+                          width=basemap_width, height=basemap_height,
+                          lon_0=lon_0, lat_0=lat_0)
+
+        shape_filename = os.path.join(os.path.dirname(self.shape_file_path),
+                                      Path(self.shape_file_path).stem)
+        basemap.readshapefile(shape_filename, name=shape_filename)
+
+        # Plot inv_obj data
+        xi, yi = basemap(lons, lats)
+        basemap.pcolor(xi, yi, inv_obj, vmin=clim[0], vmax=clim[1])
+
+        # Display colorbar
+        cbar = basemap.colorbar()
+        cbar.ax.get_yaxis().labelpad = 10
+        cbar.ax.set_ylabel(bar_label, rotation=90)
+
+        plt.show()
