@@ -12,9 +12,6 @@ dineof:
     # Output folder. Left and Right EOFs will be written here
     output_dir: "2019/Output"
 
-    # 'result_path' contains the filename of the filled data
-    result_path: "2019/Output/unified_tensor.npy"
-
     # time vector (necessary if B_DIFF option is activated in ppdef.h
     # necessary files:
     # alpha: parameter specifying the strength of the filter
