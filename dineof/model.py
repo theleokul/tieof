@@ -1,6 +1,7 @@
 import os
-import json
+import yaml
 import subprocess
+import tempfile
 
 from pathlib import Path
 
@@ -8,14 +9,15 @@ from .data_cook import DataCook
 
 
 class Dineof:
-    def __init__(self, data_desc_path='data_desc.json'):
+    def __init__(self, data_desc_path):
         with open(data_desc_path, 'r') as f:
-            data_desc = json.load(f)
+            data_desc = yaml.safe_load(f)
 
-        for k, v in data_desc.items():
-            setattr(self, k, v)
+        for section, section_dict in data_desc.items():
+            for k, v in section_dict.items():
+                setattr(self, k, v)
 
-        self.dc = DataCook(self.shape_file_path, self.raw_data_dir, self.investigated_obj)
+        self.dc = DataCook(self.shape_file_path, self.input_dir, self.investigated_obj)
 
     def fit(
         self,
@@ -55,11 +57,12 @@ class Dineof:
                             self.dc.get_interpolated_path())
 
     def predict(self):
-        # TODO: dineof_init_path generation based on data_desc_path
-        subprocess.call([
-            f'{self.dineof_executer}',
-            f'{self.dineof_init_path}'
-        ])
+        with tempfile.NamedTemporaryFile() as tmp:
+            tmp.write(self.dc.construct_dineof_init())
+            subprocess.call([
+                f'{self.dineof_executer}',
+                f'{tmp.name}'
+            ])
 
         # Save output of GHER DINEOF in .npy format
         npy_result_path = os.path.abspath(self.result_path)
