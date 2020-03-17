@@ -66,8 +66,9 @@ class Dineof:
                             self.dc.get_interpolated_path())
 
     def predict(self):
-        with tempfile.NamedTemporaryFile() as tmp:
+        with tempfile.NamedTemporaryFile(suffix='.init') as tmp:
             tmp.write(self.construct_dineof_init())
+            tmp.seek(0)
             subprocess.call([
                 f'{self.dineof_executer}',
                 f'{tmp.name}'
@@ -78,7 +79,7 @@ class Dineof:
 
     def construct_dineof_init(self):
         """Touch dineof.init and return it's temporary filename"""
-        dineof_init = f"""
+        dineof_init = f"""\
             data = ['{self.dc.get_unified_tensor_path(extension='dat')}']
             mask = ['{self.dc.get_static_grid_mask_path(extension='dat')}']
             time = '{self.dc.get_timeline_path(extension='dat')}'
@@ -98,4 +99,4 @@ class Dineof:
             seed = {self.seed}
         """
 
-        return bytes(dineof_init, encoding='utf-8')
+        return bytes(dineof_init, encoding='ascii')
