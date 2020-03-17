@@ -10,7 +10,7 @@ from sklearn import neighbors
 from pathlib import Path
 from oct2py import octave
 
-from . import utils
+from . import _utils as utils
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 gher_scripts_dir = os.path.join(base_dir, 'gher_scripts')

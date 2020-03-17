@@ -3,7 +3,7 @@ import yaml
 import subprocess
 import tempfile
 
-from .data_cook import DataCook
+from ._data_cook import DataCook
 
 
 class Dineof:
@@ -67,7 +67,7 @@ class Dineof:
 
     def predict(self):
         with tempfile.NamedTemporaryFile(suffix='.init') as tmp:
-            tmp.write(self.construct_dineof_init())
+            tmp.write(self._construct_dineof_init())
             tmp.seek(0)
             subprocess.call([
                 f'{self.dineof_executer}',
@@ -77,7 +77,7 @@ class Dineof:
         # Save output of GHER DINEOF in .npy format
         DataCook.dat_to_npy(self.dat_result_path, self.npy_result_path)
 
-    def construct_dineof_init(self):
+    def _construct_dineof_init(self):
         """Touch dineof.init and return it's temporary filename"""
         dineof_init = f"""\
             data = ['{self.dc.get_unified_tensor_path(extension='dat')}']

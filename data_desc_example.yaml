@@ -1,12 +1,16 @@
 # Parameters for the interpolation part of the program
 interpolation:
+    # Investigated object in the .nc dataset (e.x. 'chlor_a')
     investigated_obj: "chlor_a"
+    # Shape of the area we want to care about
     shape_file_path: "shapes/baikal/baikal.shp"
+    # Directory with gapped data you want to recover
     input_dir: "2019/Input"
 
 # Parameters for the GHER DINEOF
 dineof:
     # Shell command to call GHER DINEOF
+    # Details: http://modb.oce.ulg.ac.be/mediawiki/index.php/DINEOF
     dineof_executer: "/home/kulikov/dineof-3.0/dineof"
 
     # Output folder. Left and Right EOFs will be written here
