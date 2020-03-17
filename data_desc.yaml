@@ -7,7 +7,7 @@ interpolation:
 # Parameters for the GHER DINEOF
 dineof:
     # Shell command to call GHER DINEOF
-    dineof_executer": "/home/kulikov/dineof-3.0/dineof"
+    dineof_executer: "/home/kulikov/dineof-3.0/dineof"
 
     # Output folder. Left and Right EOFs will be written here
     output_dir: "2019/Output"
