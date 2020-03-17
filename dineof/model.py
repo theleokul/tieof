@@ -15,7 +15,18 @@ class Dineof:
             for k, v in section_dict.items():
                 setattr(self, k, v)
 
+        # Initialize object that is responsible for interpolation procedures
         self.dc = DataCook(self.shape_file_path, self.input_dir, self.investigated_obj)
+
+        # Initialize paths for final result
+        self.dat_result_path = os.path.join(
+            os.path.abspath(self.output_dir),
+            self.dc.get_unified_tensor_path(extension='dat').split('/')[-1]
+        )
+        self.npy_result_path = os.path.join(
+            os.path.abspath(self.output_dir),
+            self.dc.get_unified_tensor_path(extension='npy').split('/')[-1]
+        )
 
     def fit(
         self,
@@ -63,12 +74,7 @@ class Dineof:
             ])
 
         # Save output of GHER DINEOF in .npy format
-        npy_result_path = os.path.abspath(self.result_path)
-        dat_result_path = os.path.join(
-            os.path.abspath(self.output_dir),
-            f'{self.dc.get_unified_tensor_path(extension="dat").split("/")[-1]}'
-        )
-        DataCook.dat_to_npy(dat_result_path, npy_result_path)
+        DataCook.dat_to_npy(self.dat_result_path, self.npy_result_path)
 
     def construct_dineof_init(self):
         """Touch dineof.init and return it's temporary filename"""
@@ -88,8 +94,7 @@ class Dineof:
             eof = {self.eof}
             norm = {self.norm}
             Output = '{os.path.abspath(self.output_dir)}'
-            results = ['{os.path.join(os.path.abspath(self.output_dir),
-                         self.dc.get_unified_tensor_path(extension='dat').split('/')[-1])}']
+            results = ['{self.dat_result_path}']
             seed = {self.seed}
         """
 
