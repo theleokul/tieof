@@ -211,7 +211,7 @@ class DataCook:
         final_data_files = []
         for day in day_range:
             #  Choose all files for specific day
-            r_compiler = re.compile(f'^{self.raw_data_dir}/' + r'[a-b]*\d{4}' + f'{day:03d}', re.I)
+            r_compiler = re.compile(f'^{self.raw_data_dir}/' + r'[a-z]*\d{4}' + f'{day:03d}', re.I)
             filtered_data_files = list(filter(r_compiler.match, data_files))
 
             final_data_files.extend(filtered_data_files)
@@ -247,11 +247,11 @@ class DataCook:
         already_analyzed_days = []
         for f in data_files:
             # Pull day from filename
-            day = int(re.search(f'^{int_data_dir_path}/' + r'[a-b]*\d{4}(\d{3})', f, re.I).group(1))
+            day = int(re.search(f'^{int_data_dir_path}/' + r'[a-z]*\d{4}(\d{3})', f, re.I).group(1))
             if day in already_analyzed_days:
                 continue
             #  Choose all files for this specific day
-            r_compiler = re.compile(f'^{int_data_dir_path}/' + r'[a-b]*\d{4}' + f'{day:03d}', re.I)
+            r_compiler = re.compile(f'^{int_data_dir_path}/' + r'[a-z]*\d{4}' + f'{day:03d}', re.I)
             filtered_data_files = list(filter(r_compiler.match, data_files))
 
             datasets = [np.load(f) for f in filtered_data_files]

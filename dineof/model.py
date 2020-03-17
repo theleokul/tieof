@@ -1,24 +1,32 @@
 import os
-import json
+import yaml
 import subprocess
-
-from pathlib import Path
-import numpy as np
-from mpl_toolkits.basemap import Basemap
-import matplotlib.pyplot as plt
+import tempfile
 
 from .data_cook import DataCook
 
 
 class Dineof:
-    def __init__(self, data_desc_path='data_desc.json'):
+    def __init__(self, data_desc_path):
         with open(data_desc_path, 'r') as f:
-            data_desc = json.load(f)
+            data_desc = yaml.safe_load(f)
 
-        for k, v in data_desc.items():
-            setattr(self, k, v)
+        for section, section_dict in data_desc.items():
+            for k, v in section_dict.items():
+                setattr(self, k, v)
 
-        self.dc = DataCook(self.shape_file_path, self.raw_data_dir, self.investigated_obj)
+        # Initialize object that is responsible for interpolation procedures
+        self.dc = DataCook(self.shape_file_path, self.input_dir, self.investigated_obj)
+
+        # Initialize paths for final result
+        self.dat_result_path = os.path.join(
+            os.path.abspath(self.output_dir),
+            self.dc.get_unified_tensor_path(extension='dat').split('/')[-1]
+        )
+        self.npy_result_path = os.path.join(
+            os.path.abspath(self.output_dir),
+            self.dc.get_unified_tensor_path(extension='npy').split('/')[-1]
+        )
 
     def fit(
         self,
@@ -58,50 +66,37 @@ class Dineof:
                             self.dc.get_interpolated_path())
 
     def predict(self):
-        # TODO: dineof_init_path generation based on data_desc_path
-        subprocess.call([
-            f'{self.dineof_executer}',
-            f'{self.dineof_init_path}'
-        ])
+        with tempfile.NamedTemporaryFile(suffix='.init') as tmp:
+            tmp.write(self.construct_dineof_init())
+            tmp.seek(0)
+            subprocess.call([
+                f'{self.dineof_executer}',
+                f'{tmp.name}'
+            ])
 
         # Save output of GHER DINEOF in .npy format
-        npy_result_path = os.path.abspath(self.result_path)
-        dat_result_path = os.path.join(os.path.abspath(self.output_dir),
-                                       f'{Path(npy_result_path).stem}.dat')
-        DataCook.dat_to_npy(dat_result_path, npy_result_path)
+        DataCook.dat_to_npy(self.dat_result_path, self.npy_result_path)
 
-    def plot(self,
-             day,
-             basemap_width=6 * 1E5,
-             basemap_height=6 * 1E5,
-             lon_0=106.5,
-             lat_0=53.5,
-             bar_label='chlor, mg * m^-3',
-             clim=(None, None)):
-        unified_tensor = np.load(os.path.abspath(self.result_path))
-        timeline = self.dc.get_timeline()[0]
-        day_index = np.where(timeline == day)[0][0]
-        inv_obj = unified_tensor[:, :, day_index]
+    def construct_dineof_init(self):
+        """Touch dineof.init and return it's temporary filename"""
+        dineof_init = f"""\
+            data = ['{self.dc.get_unified_tensor_path(extension='dat')}']
+            mask = ['{self.dc.get_static_grid_mask_path(extension='dat')}']
+            time = '{self.dc.get_timeline_path(extension='dat')}'
+            alpha = {self.alpha}
+            numit = {self.numit}
+            nev = {self.nev}
+            neini = {self.neini}
+            ncv = {self.ncv}
+            tol = {self.tol}
+            nitemax = {self.nitemax}
+            toliter = {self.toliter}
+            rec = {self.rec}
+            eof = {self.eof}
+            norm = {self.norm}
+            Output = '{os.path.abspath(self.output_dir)}'
+            results = ['{self.dat_result_path}']
+            seed = {self.seed}
+        """
 
-        # Load static grid
-        lons, lats, _ = self.dc.get_lons_lats_mask()
-
-        # Prepare background of the plot
-        basemap = Basemap(projection='lcc', resolution='i',
-                          width=basemap_width, height=basemap_height,
-                          lon_0=lon_0, lat_0=lat_0)
-
-        shape_filename = os.path.join(os.path.dirname(self.shape_file_path),
-                                      Path(self.shape_file_path).stem)
-        basemap.readshapefile(shape_filename, name=shape_filename)
-
-        # Plot inv_obj data
-        xi, yi = basemap(lons, lats)
-        basemap.pcolor(xi, yi, inv_obj, vmin=clim[0], vmax=clim[1])
-
-        # Display colorbar
-        cbar = basemap.colorbar()
-        cbar.ax.get_yaxis().labelpad = 10
-        cbar.ax.set_ylabel(bar_label, rotation=90)
-
-        plt.show()
+        return bytes(dineof_init, encoding='ascii')
