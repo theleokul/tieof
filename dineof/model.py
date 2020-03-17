@@ -56,7 +56,7 @@ class Dineof:
 
     def predict(self):
         with tempfile.NamedTemporaryFile() as tmp:
-            tmp.write(self.dc.construct_dineof_init())
+            tmp.write(self.construct_dineof_init())
             subprocess.call([
                 f'{self.dineof_executer}',
                 f'{tmp.name}'
@@ -69,3 +69,28 @@ class Dineof:
             f'{self.dc.get_unified_tensor_path(extension="dat").split("/")[-1]}'
         )
         DataCook.dat_to_npy(dat_result_path, npy_result_path)
+
+    def construct_dineof_init(self):
+        """Touch dineof.init and return it's temporary filename"""
+        dineof_init = f"""
+            data = ['{self.dc.get_unified_tensor_path(extension='dat')}']
+            mask = ['{self.dc.get_static_grid_mask_path(extension='dat')}']
+            time = '{self.dc.get_timeline_path(extension='dat')}'
+            alpha = {self.alpha}
+            numit = {self.numit}
+            nev = {self.nev}
+            neini = {self.neini}
+            ncv = {self.ncv}
+            tol = {self.tol}
+            nitemax = {self.nitemax}
+            toliter = {self.toliter}
+            rec = {self.rec}
+            eof = {self.eof}
+            norm = {self.norm}
+            Output = '{os.path.abspath(self.output_dir)}'
+            results = ['{os.path.join(os.path.abspath(self.output_dir),
+                         self.dc.get_unified_tensor_path(extension='dat').split('/')[-1])}']
+            seed = {self.seed}
+        """
+
+        return bytes(dineof_init, encoding='utf-8')
