@@ -125,6 +125,11 @@ class DataCook:
 
             yield lons, lats, inv_obj, inv_obj_mask, raw_data_file
 
+    def form_cut_mask_on_bounds(self, matrix, bounds):
+        b_low, b_high = bounds
+
+        return np.logical_and(matrix > b_low, matrix < b_high)
+
     def interpolate_raw_data_obj(self, raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask):
         # Static grid
         static_grid_dir = self.get_static_grid_path()
@@ -132,7 +137,20 @@ class DataCook:
         static_lats = np.load(os.path.join(static_grid_dir, 'lats.npy'))
         static_mask = np.load(os.path.join(static_grid_dir, 'mask.npy')).astype(np.bool)
 
-        # Raw data from satellite
+        # Form mask for raw data from satellite to constrain it on static data
+        lons_cut_mask = self.form_cut_mask_on_bounds(raw_lons,
+                                                     bounds=(static_lons[:, 0].min(), static_lons[:, -1].max()))
+        lats_cut_mask = self.form_cut_mask_on_bounds(raw_lats,
+                                                     bounds=(static_lats[-1].min(), static_lats[0].max()))
+        cut_mask = np.logical_and(lons_cut_mask, lats_cut_mask)
+
+        # Constrain raw data to newly formed mask
+        raw_lons = raw_lons[cut_mask]
+        raw_lats = raw_lats[cut_mask]
+        raw_inv_obj = raw_inv_obj[cut_mask]
+        raw_inv_obj_mask = raw_inv_obj_mask[cut_mask]
+
+        # Get from raw data only known points
         raw_lons_known = raw_lons[raw_inv_obj_mask]
         raw_lats_known = raw_lats[raw_inv_obj_mask]
         raw_lons_lats_known = np.c_[raw_lons_known, raw_lats_known]
