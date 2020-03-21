@@ -18,6 +18,9 @@ class Dineof:
         # Initialize object that is responsible for interpolation procedures
         self.dc = DataCook(self.shape_file_path, self.input_dir, self.investigated_obj)
 
+        # Create Output dir if not exists
+        os.makedirs(self.output_dir, exist_ok=True)
+
         # Initialize paths for final result
         self.dat_result_path = os.path.join(
             os.path.abspath(self.output_dir),
@@ -34,7 +37,9 @@ class Dineof:
         remove_low_fullness=False,
         force_static_grid_touch=False,
         day_range_to_preserve=range(151, 244),  # (151, 244) - summer
-        keep_only_best_day=True
+        keep_only_best_day=True,
+        resolution=1,
+        move_time_axis_to_end_in_unified_tensor=True
     ):
         """
             Fits the dineof model
@@ -44,10 +49,9 @@ class Dineof:
             force_static_grid_touch - if True: create a static grid if it already exists
             best_day_range_to_preserve - Delete all data for days outside of this range, keep 1 matrix for day
         """
-        self.dc.touch_static_grid(force_static_grid_touch)
+        self.dc.touch_static_grid(force_static_grid_touch, resolution)
         DataCook.npy_to_dat(self.dc.get_static_grid_mask_path(extension='npy'),
-                            self.dc.get_static_grid_path(),
-                            force_static_grid_touch)
+                            self.dc.get_static_grid_path())
 
         if day_range_to_preserve:
             self.dc.preserve_day_range_only(day_range_to_preserve)
@@ -57,7 +61,7 @@ class Dineof:
         if keep_only_best_day:
             self.dc.preserve_best_day_only()
 
-        self.dc.touch_unified_tensor()
+        self.dc.touch_unified_tensor(move_time_axis_to_end_in_unified_tensor)
         DataCook.npy_to_dat(self.dc.get_unified_tensor_path(extension='npy'),
                             self.dc.get_interpolated_path())
 

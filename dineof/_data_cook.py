@@ -53,7 +53,7 @@ class DataCook:
     def get_unified_tensor_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'unified_tensor.{extension}')
 
-    def touch_static_grid(self, force_static_grid_touch, resolution=1):
+    def touch_static_grid(self, force_static_grid_touch, resolution):
         """Generate spatial grid"""
         static_grid_dir = self.get_static_grid_path()
         lons_path = os.path.join(static_grid_dir, 'lons.npy')
@@ -291,7 +291,7 @@ class DataCook:
 
         print(f'Best day is only kept in {int_data_dir_path}.')
 
-    def touch_unified_tensor(self, move_new_axis_to_end=True):
+    def touch_unified_tensor(self, move_new_axis_to_end):
         """
             Unify all files from interpolated in 1 tensor and put it
             in the same directory as unified.npy
@@ -339,7 +339,7 @@ class DataCook:
         print(f'timeline.npy is created here: {timeline_path}')
 
     @staticmethod
-    def npy_to_dat(npy_path, dat_path, force_touch=False):
+    def npy_to_dat(npy_path, dat_path):
         """
             Transform data from .npy to .dat
 
@@ -353,19 +353,11 @@ class DataCook:
             if dat_path.split('.')[-1] == 'dat':
                 # dat_path is a regular path
 
-                # Check of existence
-                if not force_touch and os.path.isfile(dat_path):
-                    return
-
                 octave.gwrite(dat_path, d)
             else:
                 # dat_path is a directory
                 os.makedirs(dat_path, exist_ok=True)
                 dat_path = os.path.join(dat_path, f'{Path(npy_path).stem}.dat')
-
-                # Check of existences
-                if not force_touch and os.path.isfile(dat_path):
-                    return
 
                 octave.gwrite(dat_path, d)
             print(f'{Path(dat_path).stem}.dat is created here: {dat_path}')
@@ -375,7 +367,7 @@ class DataCook:
             raise Exception('npy_path should be either directory or regular file')
 
     @staticmethod
-    def dat_to_npy(dat_path, npy_path, force_touch=False):
+    def dat_to_npy(dat_path, npy_path):
         """
             Transform data from .dat to .npy
 
@@ -386,20 +378,12 @@ class DataCook:
             if npy_path.split('.')[-1] == 'npy':
                 # npy_path is a regular path
 
-                # Check of existence
-                if not force_touch and os.path.isfile(npy_path):
-                    return
-
                 d = octave.gread(dat_path)
                 np.save(npy_path, d)
             else:
                 # npy_path is a directory
                 os.makedirs(npy_path, exist_ok=True)
                 npy_path = os.path.join(npy_path, f'{Path(dat_path).stem}.npy')
-
-                # Check of existences
-                if not force_touch and os.path.isfile(npy_path):
-                    return
 
                 d = octave.gread(dat_path)
                 np.save(npy_path, d)
