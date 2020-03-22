@@ -46,3 +46,10 @@ def calculate_fullness(X, mask):
     overall_size = X.size
 
     return data_size / overall_size
+
+
+def zero_negative(X):
+    not_nan_mask = ~np.isnan(X)
+    X[not_nan_mask] = np.clip(X[not_nan_mask], 0, X[not_nan_mask].max())
+
+    return X
