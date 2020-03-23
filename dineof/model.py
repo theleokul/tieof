@@ -4,12 +4,22 @@ import subprocess
 import tempfile
 
 import numpy as np
-from mpl_toolkits.basemap import Basemap
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import matplotlib as mpl
-from matplotlib.widgets import Slider
-from pathlib import Path
+
+try:
+    from mpl_toolkits.basemap import Basemap
+    import matplotlib.pyplot as plt
+    import matplotlib as mpl
+    from matplotlib.widgets import Slider
+    PLOT_FEATURE_IS_ENABLED = True
+except ModuleNotFoundError:
+    print(
+        """
+        NOTE: If you want to use plot features of this module, install these modules:
+        - basemap
+        - matplotlibs
+        """
+    )
+    PLOT_FEATURE_IS_ENABLED = False
 
 from ._data_cook import DataCook
 from . import _utils as utils
@@ -120,111 +130,77 @@ class Dineof:
 
         return bytes(dineof_init, encoding='ascii')
 
+    def get_reconstructed_unified_tensor(self, zero_negative_values=False, apply_log_scale=False):
+        t = np.load(os.path.abspath(self.npy_result_path))
+
+        if zero_negative_values:
+            t = utils.zero_negative(t)
+
+        if apply_log_scale:
+            t = utils.apply_log_scale(t)
+
+        return t
+
     def plot(self,
              figsize=(14, 7),
-             basemap_width=6 * 1E5,
-             basemap_height=6 * 1E5,
-             lon_0=106.5,
-             lat_0=53.5,
-             bar_label='chlor, mg * m^-3',
-             clim=(None, None)):
-
-        # Stub
-        days = [192]
+             zero_negative_values=True,
+             apply_log_scale=True,
+             cbar_label='chlor, mg * m^-3'):
+        utils.guard(PLOT_FEATURE_IS_ENABLED, 'Your system cannot build plots')
 
         fig = plt.figure(figsize=figsize)
-
+        fig.suptitle('Spatio-temporal plot', fontsize=20)
         # Load static grid
-        lons, lats, mask = self.dc.get_lons_lats_mask()
-        mask = mask.astype(np.bool)
-
-        # Get reconstructed unified_tensor
-        recovered_unified_tensor = np.load(os.path.abspath(self.npy_result_path))
-        recovered_unified_tensor = utils.zero_negative(recovered_unified_tensor)
-        recovered_unified_tensor[~np.isnan(recovered_unified_tensor)] = np.log(recovered_unified_tensor[~np.isnan(recovered_unified_tensor)] + 1e-10)
-        print(recovered_unified_tensor[~np.isnan(recovered_unified_tensor)].mean())
-        # Get gapped unified tensor
-        gapped_unified_tensor = self.dc.get_unified_tensor()
-        gapped_unified_tensor[~np.isnan(gapped_unified_tensor)] = np.log(gapped_unified_tensor[~np.isnan(gapped_unified_tensor)] + 1e-10)
-
+        lons, lats, _ = self.dc.get_lons_lats_mask()
+        lon_mean, lat_mean = lons.mean(), lats.mean()
         # Choose specified days in unified_tensor
         timeline = self.dc.get_timeline()[0]
-        print(timeline)
-        gapped_recovered_objs = []
-        for day in days:
-            day_index = np.where(timeline == day)[0][0]
-            gapped_recovered_obj = gapped_unified_tensor[:, :, day_index], \
-                                   utils.zero_negative(recovered_unified_tensor[:, :, day_index])
-
-            # print(gapped_recovered_obj[1])
-
-            gapped_recovered_objs.append(gapped_recovered_obj)
-
-            # vmin, vmax = gapped_recovered_obj[1][~np.isnan(gapped_recovered_obj[1])].min(), \
-            #              gapped_recovered_obj[1][~np.isnan(gapped_recovered_obj[1])].max()
-
-        vmin = recovered_unified_tensor[~np.isnan(recovered_unified_tensor)].min()
-        vmax = recovered_unified_tensor[~np.isnan(recovered_unified_tensor)].max()
-        print('Recovered vmin, vmax: ', vmin, vmax)
-
+        # Get tensors to display
+        reconstructed_tensor = self.get_reconstructed_unified_tensor(zero_negative_values, apply_log_scale)
+        gapped_tensor = self.dc.get_unified_tensor(apply_log_scale)
+        # Calculate color edges
+        vmin = utils.get_min(reconstructed_tensor)
+        vmax = utils.get_max(reconstructed_tensor)
         # Remove extension from shape_file_path (It is required by basemap module)
-        shape_file_path_stem = os.path.join(os.path.dirname(self.shape_file_path),
-                                            Path(self.shape_file_path).stem)
+        clipped_shape_file_path = utils.remove_extension(self.shape_file_path)
 
-        # Create plot space
-        ax_lst = fig.subplots(1, 2)
+        def plot_on(axes, data):
+            basemap = Basemap(projection='cyl', resolution='i',
+                              llcrnrlon=lons.min(), llcrnrlat=lats.min(), urcrnrlon=lons.max(), urcrnrlat=lats.max(),
+                              lon_0=lon_mean, lat_0=lat_mean, ax=axes)
+            basemap.readshapefile(clipped_shape_file_path, name=clipped_shape_file_path)
+            plot = basemap.imshow(data, vmin=vmin, vmax=vmax, origin='upper')
+            return plot
 
-        # extent = (lons[mask].min()+1, lons[mask].max()-1, lats[mask].min()+1, lats[mask].max()-1)  # [left, right, bottom, top]
+        # Draw first gapped day
+        gapped_obj = utils.get_matrix_by_day(timeline[0], timeline, gapped_tensor)
+        gapped_axes = fig.add_axes([0, 0.35, 0.47, 0.47])
+        gapped_axes.set_title('Gapped data')
+        gapped_plot = plot_on(gapped_axes, gapped_obj)
 
-        # Add plot 1
-        basemap = Basemap(projection='cyl', resolution='i',
-                          llcrnrlon=lons.min(), llcrnrlat=lats.min(), urcrnrlon=lons.max(), urcrnrlat=lats.max(),
-                          # width=basemap_width, height=basemap_height,
-                          lon_0=lon_0, lat_0=lat_0, ax=ax_lst[0])
-        basemap.readshapefile(shape_file_path_stem, name=shape_file_path_stem)
+        # Draw first reconstructed day
+        reconstructed_obj = utils.get_matrix_by_day(timeline[0], timeline, reconstructed_tensor)
+        reconstructed_axes = fig.add_axes([0.4, 0.35, 0.47, 0.47])
+        reconstructed_axes.set_title('Reconstructed data')
+        reconstructed_plot = plot_on(reconstructed_axes, reconstructed_obj)
 
-        # Plot inv_obj data
-        xi, yi = basemap(lons, lats)
-        p_gapped = basemap.imshow(gapped_recovered_objs[0][0], vmin=vmin, vmax=vmax,
-                                  origin='upper', interpolation='nearest')
-
-        # end plot 1
-
-        # Add plot 2
-        basemap = Basemap(projection='cyl', resolution='i',
-                          llcrnrlon=lons.min(), llcrnrlat=lats.min(), urcrnrlon=lons.max(), urcrnrlat=lats.max(),
-                          # width=basemap_width, height=basemap_height,
-                          lon_0=lon_0, lat_0=lat_0, ax=ax_lst[1])
-        basemap.readshapefile(shape_file_path_stem, name=shape_file_path_stem)
-
-        # Plot inv_obj data
-        xi, yi = basemap(lons, lats)
-        # p_reconstructed = basemap.pcolor(xi, yi, gapped_recovered_objs[0][1], vmin=vmin, vmax=vmax)
-        p_reconstructed = basemap.imshow(gapped_recovered_objs[0][1], vmin=vmin, vmax=vmax,
-                                         origin='upper')
-
-        # Display colorbar
-        fig.subplots_adjust(right=0.8, bottom=0.35)
-        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        # Add colorbar
+        # fig.subplots_adjust(right=0.8, bottom=0.35)
+        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7], label=cbar_label)
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-        sm = cm.ScalarMappable(norm=norm)
+        sm = mpl.cm.ScalarMappable(norm=norm)
         fig.colorbar(sm, cax=cbar_ax)
 
-        # Add slider
-        # import ipdb; ipdb.set_trace()
-
         def day_update(day):
-            # Get day index
-            day_index = np.where(timeline == day)[0][0]
-            gapped_recovered_obj = gapped_unified_tensor[:, :, day_index], \
-                                   utils.zero_negative(recovered_unified_tensor[:, :, day_index])
-
-            p_gapped.set_data(gapped_recovered_obj[0])
-            p_reconstructed.set_data(gapped_recovered_obj[1])
+            gapped_obj = utils.get_matrix_by_day(day, timeline, gapped_tensor)
+            reconstructed_obj = utils.get_matrix_by_day(day, timeline, reconstructed_tensor)
+            gapped_plot.set_data(gapped_obj)
+            reconstructed_plot.set_data(reconstructed_obj)
             plt.draw()
 
-        ax_slider = fig.add_axes([0.1, 0.2, 0.6, 0.05])
-        slider = Slider(ax=ax_slider,
+        # Add slider
+        slider_axes = fig.add_axes([0.1, 0.15, 0.7, 0.05])
+        slider = Slider(ax=slider_axes,
                         label='Day',
                         valmin=timeline.min(),
                         valmax=timeline.max(),
@@ -233,7 +209,4 @@ class Dineof:
                         valfmt='%1.0f',
                         color='green')
         slider.on_changed(day_update)
-
-        # end plot 2
-
         plt.show()
