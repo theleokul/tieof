@@ -32,13 +32,23 @@ class DataCook:
     def get_static_grid_mask_path(self, extension='npy'):
         return os.path.join(self.get_static_grid_path(), f'mask.{extension}')
 
-    def get_lons_lats_mask(self):
+    def get_lons(self):
         grid_path = self.get_static_grid_path()
         lons = np.load(os.path.join(grid_path, 'lons.npy'))
-        lats = np.load(os.path.join(grid_path, 'lats.npy'))
-        mask = np.load(os.path.join(grid_path, 'mask.npy'))
+        return lons
 
-        return lons, lats, mask
+    def get_lats(self):
+        grid_path = self.get_static_grid_path()
+        lats = np.load(os.path.join(grid_path, 'lats.npy'))
+        return lats
+
+    def get_mask(self):
+        grid_path = self.get_static_grid_path()
+        mask = np.load(os.path.join(grid_path, 'mask.npy'))
+        return mask
+
+    def get_lons_lats_mask(self):
+        return self.get_lons(), self.get_lats(), self.get_mask()
 
     def get_interpolated_path(self):
         return os.path.join(self.raw_data_dir, 'interpolated')

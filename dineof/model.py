@@ -6,20 +6,17 @@ import tempfile
 import numpy as np
 
 try:
-    from tabulate import tabulate
-    import pandas as pd
     from mpl_toolkits.basemap import Basemap
     import matplotlib.pyplot as plt
     import matplotlib as mpl
-    from matplotlib.widgets import Slider, TextBox
+    from matplotlib.widgets import Slider
     PLOT_FEATURE_IS_ENABLED = True
 except ModuleNotFoundError:
     print(
         """
         NOTE: If you want to use plot features of this module, install these modules:
         - basemap
-        - matplotlibs
-        - pandas
+        - matplotlib
         """
     )
     PLOT_FEATURE_IS_ENABLED = False
@@ -33,9 +30,11 @@ class Dineof:
         with open(data_desc_path, 'r') as f:
             data_desc = yaml.safe_load(f)
 
-        for section, section_dict in data_desc.items():
-            for k, v in section_dict.items():
-                setattr(self, k, v)
+        for k, v in data_desc.items():
+            setattr(self, k, v)
+
+        # Transform to book for next convenient usage
+        self.move_time_axis_in_unified_tensor_to_end = bool(self.move_time_axis_in_unified_tensor_to_end)
 
         # Initialize object that is responsible for interpolation procedures
         self.dc = DataCook(self.shape_file_path, self.input_dir, self.investigated_obj)
@@ -60,8 +59,7 @@ class Dineof:
             force_static_grid_touch=False,
             day_range_to_preserve=range(151, 244),  # (151, 244) - summer
             keep_only_best_day=True,
-            resolution=1,
-            move_time_axis_to_end_in_unified_tensor=True
+            resolution=1
     ):
         """
             Fits the dineof model
@@ -83,7 +81,7 @@ class Dineof:
         if keep_only_best_day:
             self.dc.preserve_best_day_only()
 
-        self.dc.touch_unified_tensor(move_time_axis_to_end_in_unified_tensor)
+        self.dc.touch_unified_tensor(self.move_time_axis_in_unified_tensor_to_end)
         DataCook.npy_to_dat(self.dc.get_unified_tensor_path(extension='npy'),
                             self.dc.get_interpolated_path())
 
@@ -107,7 +105,6 @@ class Dineof:
             result_tensor = np.load(self.npy_result_path)
             result_tensor = utils.zero_negative(result_tensor)
             np.save(self.npy_result_path, result_tensor)
-
 
     def _construct_dineof_init(self):
         """Touch dineof.init and return it's temporary filename"""
@@ -147,18 +144,44 @@ class Dineof:
 
         return t
 
+    def get_statistics_of_reconstructed_unified_tensor(self, zero_negative_values=False,
+                                                       apply_log_scale=False, small_chunk_to_add=.0):
+        t = self.get_reconstructed_unified_tensor(zero_negative_values, apply_log_scale, small_chunk_to_add)
+
+        return {
+            'mean': utils.get_mean(t),
+            'std': utils.get_std(t),
+            'min': utils.get_min(t),
+            'max': utils.get_max(t)
+        }
+
+    def get_statistics_of_gapped_unified_tensor(self, apply_log_scale=False, small_chunk_to_add=.0):
+        t = self.dc.get_unified_tensor(apply_log_scale, small_chunk_to_add)
+        mask = self.dc.get_mask()
+
+        return {
+            'mean': utils.get_mean(t),
+            'std': utils.get_std(t),
+            'min': utils.get_min(t),
+            'max': utils.get_max(t),
+            'fullness': utils.calculate_fullness(
+                t,
+                utils.form_tensor(mask, t.shape[-1 if self.move_time_axis_in_unified_tensor_to_end else 0])
+            )
+        }
+
     def plot(self,
              figsize=(14, 7),
              zero_negative_values=True,
              apply_log_scale=True,
              cbar_units='mg * m^-3',
              small_chunk_to_add=1e-10):
-        utils.guard(PLOT_FEATURE_IS_ENABLED, 'Your system cannot build plots. Install basemap, matplotlib and pandas.')
+        utils.guard(PLOT_FEATURE_IS_ENABLED, 'Your system cannot build plots. Install basemap, matplotlib.')
 
         fig = plt.figure(figsize=figsize)
         fig.suptitle('Spatio-temporal plot', fontsize=20)
         # Load static grid
-        lons, lats, mask = self.dc.get_lons_lats_mask()
+        lons, lats = self.dc.get_lons(), self.dc.get_lats()
         lon_mean, lat_mean = lons.mean(), lats.mean()
         # Choose specified days in unified_tensor
         timeline = self.dc.get_timeline()[0]
@@ -200,7 +223,6 @@ class Dineof:
             reconstructed_annotation.set_visible(False)
 
         # Add colorbar
-        # fig.subplots_adjust(right=0.8, bottom=0.35)
         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
         sm = mpl.cm.ScalarMappable(norm=norm)
@@ -211,23 +233,25 @@ class Dineof:
         describe_axes = fig.add_axes([0.1, 0.1, 0.7, 0.1], frame_on=False)
         describe_axes.xaxis.set_visible(False)
         describe_axes.yaxis.set_visible(False)
-        fullness = utils.calculate_fullness(gapped_tensor, utils.form_tensor(mask, gapped_tensor.shape[-1]))
+        gapped_statistics_wo_log = self.get_statistics_of_gapped_unified_tensor(False, small_chunk_to_add)
         if apply_log_scale:
-            reconstructed_tensor_wo_log = self.get_reconstructed_unified_tensor(zero_negative_values,
-                                                                                small_chunk_to_add=small_chunk_to_add)
+            reconstructed_statistics = self.get_statistics_of_reconstructed_unified_tensor(
+                zero_negative_values, apply_log_scale, small_chunk_to_add)
+            reconstructed_statistics_wo_log = self.get_statistics_of_reconstructed_unified_tensor(
+                zero_negative_values, small_chunk_to_add=small_chunk_to_add)
             describe_data = [
                 [
-                    utils.get_mean(reconstructed_tensor_wo_log),
-                    utils.get_std(reconstructed_tensor_wo_log),
-                    utils.get_min(reconstructed_tensor_wo_log),
-                    utils.get_max(reconstructed_tensor_wo_log),
-                    fullness
+                    reconstructed_statistics_wo_log['mean'],
+                    reconstructed_statistics_wo_log['std'],
+                    reconstructed_statistics_wo_log['min'],
+                    reconstructed_statistics_wo_log['max'],
+                    gapped_statistics_wo_log['fullness']
                 ],
                 [
-                    utils.get_mean(reconstructed_tensor),
-                    utils.get_std(reconstructed_tensor),
-                    utils.get_min(reconstructed_tensor),
-                    utils.get_max(reconstructed_tensor),
+                    reconstructed_statistics['mean'],
+                    reconstructed_statistics['std'],
+                    reconstructed_statistics['min'],
+                    reconstructed_statistics['max'],
                     np.nan
                 ]
             ]
@@ -241,7 +265,7 @@ class Dineof:
                     utils.get_std(reconstructed_tensor),
                     utils.get_min(reconstructed_tensor),
                     utils.get_max(reconstructed_tensor),
-                    fullness
+                    gapped_statistics_wo_log['fullness']
                 ]
             ]
             describe_axes.table(cellText=describe_data,
