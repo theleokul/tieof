@@ -56,7 +56,7 @@ def zero_negative(X):
     return X
 
 
-def apply_log_scale(X, small_chunk_to_add=1e-10):
+def apply_log_scale(X, small_chunk_to_add=0):
     not_nan_mask = ~np.isnan(X)
     X[not_nan_mask] = np.log(X[not_nan_mask] + small_chunk_to_add)
     return X
@@ -76,11 +76,22 @@ def get_max(X):
     return m
 
 
-def get_mean(X):
+def get_mean(X, apply_log_scale=False):
     m = X.mean()
     if np.isnan(m):
         m = X[~np.isnan(X)].mean()
+    if apply_log_scale:
+        m = np.log(m)
     return m
+
+
+def get_std(X, apply_log_scale=False):
+    std = X.std()
+    if np.isnan(std):
+        std = X[~np.isnan(X)].std()
+    if apply_log_scale:
+        std = np.log(std)
+    return std
 
 
 def remove_extension(path):
@@ -88,5 +99,21 @@ def remove_extension(path):
 
 
 def get_matrix_by_day(day, day_mapper, tensor):
-    day_index = np.where(day_mapper == day)[0][0]
+    """Get matrix by day, if day is not found => return empty matrix (filled with nans)"""
+    try:
+        day_index = np.where(day_mapper == day)[0][0]
+    except IndexError:
+        return np.full_like(tensor[:, :, 0], np.nan)
     return tensor[:, :, day_index]
+
+
+def form_tensor(X, multiplicator, move_new_axis_to_end=True):
+    tensor = []
+    for _ in range(multiplicator):
+        tensor.append(X)
+    tensor = np.array(tensor)
+
+    if move_new_axis_to_end:
+        tensor = np.moveaxis(tensor, 0, -1)
+
+    return tensor
