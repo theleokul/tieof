@@ -8,3 +8,5 @@ geopandas
 netcdf4
 oct2py
 pyyaml
+matplotlib
+basemap

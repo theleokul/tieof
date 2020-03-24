@@ -3,9 +3,9 @@ interpolation:
     # Investigated object in the .nc dataset (e.x. 'chlor_a')
     investigated_obj: "chlor_a"
     # Shape of the area we want to care about
-    shape_file_path: "shapes/baikal/baikal.shp"
+    shape_file_path: "test/shapes/baikal/baikal.shp"
     # Directory with gapped data you want to recover
-    input_dir: "2019/Input"
+    input_dir: "test/2004/Input"
 
 # Parameters for the GHER DINEOF
 dineof:
@@ -14,7 +14,7 @@ dineof:
     dineof_executer: "/home/kulikov/dineof-3.0/dineof"
 
     # Output folder. Left and Right EOFs will be written here
-    output_dir: "2019/Output"
+    output_dir: "test/2004/Output"
 
     # time vector (necessary if B_DIFF option is activated in ppdef.h
     # necessary files:

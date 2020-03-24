@@ -53,6 +53,13 @@ class DataCook:
     def get_unified_tensor_path(self, extension='npy'):
         return os.path.join(self.get_interpolated_path(), f'unified_tensor.{extension}')
 
+    def get_unified_tensor(self, apply_log_scale=False, small_chunk_to_add=0):
+        unified_tensor = np.load(self.get_unified_tensor_path()) + small_chunk_to_add
+        if apply_log_scale:
+            unified_tensor = utils.apply_log_scale(unified_tensor)
+
+        return unified_tensor
+
     def touch_static_grid(self, force_static_grid_touch, resolution):
         """Generate spatial grid"""
         static_grid_dir = self.get_static_grid_path()
