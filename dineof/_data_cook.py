@@ -178,6 +178,8 @@ class DataCook:
         int_inv_obj_mask = np.zeros(shape=(int_lons_lats.shape[0]), dtype=np.bool)
 
         # Defining in which radius to interpolate
+        # It is actually euclidean metric, because 1 component equal 0
+        # I do not consider diagonal points, because according to a + b < c, they are higher
         min_grid_distance_lon = abs(static_lons[0][0] - static_lons[0][1])
         min_grid_distance_lat = abs(static_lats[0][0] - static_lats[1][0])
         min_grid_distance = utils.floor_float(np.min([min_grid_distance_lat, min_grid_distance_lon]))
