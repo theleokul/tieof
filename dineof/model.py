@@ -111,6 +111,7 @@ class Dineof:
         dineof_init = f"""\
             data = ['{self.dc.get_unified_tensor_path(extension='dat')}']
             mask = ['{self.dc.get_static_grid_mask_path(extension='dat')}']
+            clouds = '{self.clouds}'
             time = '{self.dc.get_timeline_path(extension='dat')}'
             alpha = {self.alpha}
             numit = {self.numit}

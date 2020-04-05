@@ -10,6 +10,9 @@ input_dir: "test/tataink/Input"
 # Output folder. Left and Right EOFs will be written here
 output_dir: "test/tataink/Output"
 
+# Cloud mask for custom crossvalidation
+clouds: "test/tataink/Input/static_grid/cloud_mask.dat"
+
 # If you want to move time axis in unified tensor to the end of its shape, place 1, otherwise place 0, and
 # time axis will be placed in the beginning
 move_time_axis_in_unified_tensor_to_end: 1
@@ -29,7 +32,7 @@ numit: 3
 # Give 'nev' the maximum of number of modes you allow to compute,
 # Dineof will stop after computing the optimal number of modes + 3 extra modes
 # for robust optimum detection.
-nev: 10
+nev: 20
 
 # Give 'neini' the minimum  number of modes you want to compute
 neini: 5
@@ -47,7 +50,7 @@ tol: 1.0e-8
 # of eofs obtained by the cycle ((eof decomposition <-> truncated reconstruction and
 # replacement of missing data)). An automatic criteria is defined by the following parameter
 # 'itstop' to go faster
-nitemax: 100
+nitemax: 300
 
 # Parameter 'toliter' is a precision criteria defining the threshold of automatic stopping
 # of dineof iterations, once the ratio (rms of successive missing data
