@@ -10,9 +10,6 @@ input_dir: "test/tataink/Input"
 # Output folder. Left and Right EOFs will be written here
 output_dir: "test/tataink/Output"
 
-# Cloud mask for custom crossvalidation
-clouds: "test/tataink/Input/static_grid/cloud_mask.dat"
-
 # If you want to move time axis in unified tensor to the end of its shape, place 1, otherwise place 0, and
 # time axis will be placed in the beginning
 move_time_axis_in_unified_tensor_to_end: 1
