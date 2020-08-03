@@ -9,18 +9,19 @@ from tensorly.decomposition.candecomp_parafac import initialize_factors
 from tensorly.tenalg import khatri_rao
 from tensorly.kruskal_tensor import (kruskal_normalise, KruskalTensor)
 from sklearn.base import BaseEstimator
+from tqdm import tqdm
 file_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(file_dir))
-import utils
-
+import tensor_utils as tu
+import metrics
 
 class DINEOF3(BaseEstimator):
     def __init__(self, R, tensor_shape,
-                 decomp_type='HOOI', td_iter_max=100,
+                 decomp_type='CP-ALS', td_iter_max=100,
                  nitemax=300, toliter=1e-3, tol=1e-8, to_center=True,
                  keep_non_negative_only=True,
-                 with_energy=True,
-                 lat_lon_sep_centering=True):
+                 with_energy=False,
+                 lat_lon_sep_centering=False):
         self.R = R
         self.decomp_type = decomp_type
         self.td_iter_max = td_iter_max
@@ -35,20 +36,20 @@ class DINEOF3(BaseEstimator):
 
     def score(self, X, y):
         y_hat = self.predict(X)
-        return -utils.nrmse(y_hat, y)
+        return -metrics.nrmse(y_hat, y)
 
     def predict(self, X):
         output = np.array([self.reconstructed_tensor[x[0], x[1], x[2]] for x in X.astype(np.int)])
         return output
 
     def fit(self, X, y):
-        tensor = utils.tensorify(X, y, self.tensor_shape)
+        tensor = tu.supervised2tensor(X, y, self.tensor_shape)
         self._fit(tensor)
 
     def _fit(self, tensor):
         if self.to_center:
-            tensor, *means = utils.center_3d_tensor(tensor, 
-                                                    lat_lon_separately=self.lat_lon_sep_centering)
+            tensor, *means = tu.center_3d_tensor(tensor, 
+                                                 lat_lon_separately=self.lat_lon_sep_centering)
 
         # Initial guess
         nan_mask = np.isnan(tensor)
@@ -56,7 +57,7 @@ class DINEOF3(BaseEstimator):
 
         conv_error = 0
         energy_per_iter = []
-        for i in range(self.nitemax):
+        for i in tqdm(range(self.nitemax)):
             if self.decomp_type == 'HOOI':
                 G, A = tld.partial_tucker(tensor,
                                           modes=list(range(len(self.R))),
@@ -65,10 +66,10 @@ class DINEOF3(BaseEstimator):
                                           n_iter_max=self.td_iter_max)
             elif self.decomp_type == 'truncHOSVD':
                 G, A = self.trunc_hosvd(tensor)
-            elif self.decomp_type == 'PARAFAC':
-                G, A = self.parafac(tensor, self.R, 
-                                    n_iter_max=self.td_iter_max, 
-                                    tol=self.tol)
+            elif self.decomp_type == 'CP-ALS':
+                G, A = self.cp_als(tensor, self.R, 
+                                   n_iter_max=self.td_iter_max, 
+                                   tol=self.tol)
             else:
                 raise Exception(f'{self.decomp_type} is unsupported.')
 
@@ -89,8 +90,8 @@ class DINEOF3(BaseEstimator):
         energy_per_iter = np.array(energy_per_iter)
 
         if self.to_center:
-            tensor = utils.decenter_3d_tensor(tensor, *means, 
-                                              lat_lon_separately=self.lat_lon_sep_centering)
+            tensor = tu.decenter_3d_tensor(tensor, *means, 
+                                           lat_lon_separately=self.lat_lon_sep_centering)
 
         if self.keep_non_negative_only:
             tensor[tensor < 0] = 0
@@ -109,7 +110,7 @@ class DINEOF3(BaseEstimator):
         self.factors = A
 
     def recontruct_tensor_by_factors(self, G, A):
-        if self.decomp_type == 'PARAFAC':
+        if self.decomp_type == 'CP-ALS':
             # Polyadic decomposition
             # G is a weights 1D array in this case
             tensor_hat = np.zeros(self.tensor_shape)
@@ -123,7 +124,7 @@ class DINEOF3(BaseEstimator):
 
         return tensor_hat
 
-    def parafac(self, tensor, rank, n_iter_max=100, tol=1e-8):
+    def cp_als(self, tensor, rank, n_iter_max=100, tol=1e-8):
         factors = initialize_factors(tensor, rank)
         rec_errors = []
         norm_tensor = tl.norm(tensor, 2)
@@ -178,7 +179,7 @@ class DINEOF3(BaseEstimator):
         return G, A
 
     def calculate_energy(self, tensor, G, A):
-        if self.decomp_type == 'PARAFAC':
-            raise Exception('Energy for PARAFAC is not implemented.')
+        if self.decomp_type == 'CP-ALS':
+            raise Exception('Energy for CP-ALS is not implemented.')
         else:
-            return utils.calculate_tucker_energy(tensor, A)
+            return tu.calculate_3d_tucker_energy(tensor, A)

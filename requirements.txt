@@ -1,12 +1,5 @@
-pytest
-pathlib
-shapely
-scikit-learn
 numpy
+scipy
+tensorly
+scikit-learn
 tqdm
-geopandas
-netcdf4
-oct2py
-pyyaml
-matplotlib
-basemap

@@ -3,9 +3,11 @@ import sys
 import numpy as np
 from scipy.sparse.linalg import svds
 from sklearn.base import BaseEstimator
+from tqdm import tqdm
 file_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(file_dir))
-import utils
+import tensor_utils as tu
+import metrics
 
 
 class DINEOF(BaseEstimator):
@@ -28,7 +30,7 @@ class DINEOF(BaseEstimator):
             It is made like so to be compatible with scikit-learn grid search utilities.
         """
         y_hat = self.predict(X)
-        return -utils.nrmse(y_hat, y)
+        return -metrics.nrmse(y_hat, y)
         
     def predict(self, X):
         output = np.array([self.reconstructed_tensor[x[0], x[1], x[2]] for x in X])
@@ -42,11 +44,11 @@ class DINEOF(BaseEstimator):
             lat, lon, t = x
             tensor[lat, lon, t] = y[i]
         
-        self._fit(utils.rectify_tensor(tensor))
+        self._fit(tu.rectify_3d_tensor(tensor))
         
     def _fit(self, mat):
         if self.to_center:
-            mat, *means = utils.center_mat(mat)
+            mat, *means = tu.center_mat(mat)
 
         # Initial guess
         nan_mask = np.isnan(mat)
@@ -54,12 +56,12 @@ class DINEOF(BaseEstimator):
 
         conv_error = 0
         energy_per_iter = []
-        for i in range(self.nitemax):
+        for i in tqdm(range(self.nitemax)):
             u, s, vt = svds(mat, k=self.K, tol=self.tol)
 
             # Save energy characteristics for this iteration
             if self.with_energy:
-                energy_i = utils.calculate_mat_energy(mat, s)
+                energy_i = tu.calculate_mat_energy(mat, s)
                 energy_per_iter.append(energy_i)
             
             mat_hat = u @ np.diag(s) @ vt
@@ -74,7 +76,7 @@ class DINEOF(BaseEstimator):
         energy_per_iter = np.array(energy_per_iter)
 
         if self.to_center:
-            mat = utils.decenter_mat(mat, *means)
+            mat = tu.decenter_mat(mat, *means)
 
         if self.keep_non_negative_only:
             mat[mat < 0] = 0
@@ -88,7 +90,7 @@ class DINEOF(BaseEstimator):
 
         self.final_iter = i
         self.conv_error = new_conv_error
-        self.reconstructed_tensor = utils.unrectify_mat(mat, spatial_shape=self.tensor_shape[:-1])
+        self.reconstructed_tensor = tu.unrectify_mat(mat, spatial_shape=self.tensor_shape[:-1])
         self.singular_values_ = s
         self.ucomponents_ = u
         self.vtcomponents_ = vt

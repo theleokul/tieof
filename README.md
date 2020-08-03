@@ -2,41 +2,29 @@
 
 ## Installation
 
-1. Install GHER DINEOF: http://modb.oce.ulg.ac.be/mediawiki/index.php/DINEOF  
-After this step you should have shell command calling GHER DINEOF
-
-2. Install dependencies  
+1. Install dependencies in your environment
 ```bash
 pip install -r requirements.txt  # Python 3 is required
 ```
 
 ## Usage
 
-1. Collect data  
-It should have **\*[A-Z]\*YYYYDDD.\*.nc** format and these groups:
-    * **navigation_data**  
+1. Prepare data  
 
-            With variables:  
+All models are supervised. So you need to prepare **X** (lats, lons, times) and **Y** (values) datasets. Firstly, you can download your dataset as a 3-dimensional tensor **T** with shape (lats, lons, times) and pass it to `tensor_utils.tensor2supervised` to generate X and Y.
 
-                1. longitude  
-                2. latitude
-
-    * **geophysical_data**  
-
-            With variables:  
-
-                1. investigated object which you will specify in data_desc_example.yaml
-
-2. Put meta information in **data_desc_example.yaml** (There are good comments, do not hesitate to check it)
-
-3. Run this package in your python 3.* scripts  
+2. Choose the model of your preference and use it like this
 ```python
 # Example
-from dineof.model import Dineof
+from models.dineof3 import DINEOF3
 
-d = Dineof('PUT PATH TO data_desc_example.yaml HERE')
-
-d.fit()  # By default it keeps data only for summer
-d.predict()
-
+d = DINEOF3(R=15, tensor_shape=(32, 32, 16))
+d.fit(X_train, Y_train)
+d.predict(X_test)
+d.score(X_test, Y_test)
 ```
+
+---
+## Notes
+
+You can also use these models with scikit-learn GridSearchCV to handle hyperparameters.
