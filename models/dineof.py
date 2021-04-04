@@ -65,7 +65,7 @@ class DINEOF(BaseEstimator):
         pbar = trange(self.nitemax, desc='Reconstruction')
         conv_error = 0
         energy_per_iter = []
-        for i in range(self.nitemax):
+        for i in pbar:
             u, s, vt = svds(mat, k=self.K, tol=self.tol)
 
             # Save energy characteristics for this iteration
@@ -79,6 +79,9 @@ class DINEOF(BaseEstimator):
 
             new_conv_error = np.sqrt(np.mean(np.power(mat_hat[nan_mask] - mat[nan_mask], 2))) / mat[non_nan_mask].std()
             mat = mat_hat
+
+            pbar.set_postfix(error=new_conv_error, rel_error=abs(new_conv_error - conv_error))
+
             if (new_conv_error <= self.toliter) or (abs(new_conv_error - conv_error) < self.toliter):
                 break
             conv_error = new_conv_error

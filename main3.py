@@ -17,6 +17,8 @@ def parse_args():
     parser.add_argument('--nitemax', type=int, default=100)
     parser.add_argument('--refit', action='store_true')
     parser.add_argument('--lat-lon-sep-centering', action='store_true')
+    parser.add_argument('--random-seed', type=int, default=2434311)
+    parser.add_argument('--val-size', type=float, default=0.045)
     args = parser.parse_args()
     return args
 
@@ -51,10 +53,10 @@ def main():
     X = np.asarray(np.nonzero(~np.isnan(tensor))).T
     y = tensor[tuple(X.T)]
 
-    np.random.seed(42)
+    np.random.seed(args.random_seed)
     biner = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='kmeans')
     stratify_y = biner.fit_transform(y[:, None]).flatten().astype(int)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.045, random_state=42, stratify=stratify_y)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
     print(f'Missing ratio: {(mask.sum() * args.tensor_shape[-1] - y.shape[0]) / (mask.sum() * args.tensor_shape[-1])}')
     print(f'Train points: {y_train.shape[0]}, val points: {y_val.shape[0]}')
 
@@ -63,7 +65,7 @@ def main():
     for R in Rs:
         d = get_model(args, R)
         d.fit(X_train, y_train)
-        val_errors.append(-d.score(X_val, y_val))
+        val_errors.append(-d.score(X_val, y_val) * y_val.std())
         print(f'Validation error: {val_errors[-1]}')
 
     best_R = Rs[np.argmin(val_errors)]
