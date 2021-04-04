@@ -15,6 +15,7 @@ from . import _utils as utils
 base_dir = os.path.dirname(os.path.abspath(__file__))
 gher_scripts_dir = os.path.join(base_dir, 'gher_scripts')
 octave.addpath(gher_scripts_dir)
+os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'  # HACK: May be useful when NetCDF4 dataset reading raises an exception
 
 
 class DataCook:
@@ -194,7 +195,8 @@ class DataCook:
         int_inv_obj_mask = int_inv_obj_mask.reshape(static_lons.shape)
 
         # Interpolate filtered nodes, find value based on raw data
-        knr = neighbors.KNeighborsRegressor(n_neighbors=3, weights='distance')
+        # knr = neighbors.KNeighborsRegressor(n_neighbors=3, weights='distance')
+        knr = neighbors.RadiusNeighborsRegressor(radius=min_grid_distance * 5., weights='distance')   # ~ 5 km
         knr.fit(raw_lons_lats_known, raw_inv_obj_known)
 
         # static_mask - shape of the lake, int_inv_obj_mask - points where we can interpolate
@@ -218,8 +220,8 @@ class DataCook:
 
         print('Interpolating data.')
         raw_data_files_count = len(utils.ls(self.raw_data_dir))
-        for raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask, raw_data_file in tqdm(self.read_raw_data_files(),
-                                                                                     total=raw_data_files_count):
+        for i, (raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask, raw_data_file) in tqdm(enumerate(self.read_raw_data_files()),
+                                                                                          total=raw_data_files_count):
             raw_data_file_stem = Path(raw_data_file).stem
 
             if os.path.exists(os.path.join(interpolated_dir, f'{raw_data_file_stem}.npy')):
@@ -228,7 +230,8 @@ class DataCook:
             try:
                 int_inv_obj = self.interpolate_raw_data_obj(raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask)
                 fullness = utils.calculate_fullness(int_inv_obj, mask)
-            except:
+            except Exception as e:
+                print(f'{i} is empty. {e}')
                 fullness = 0
                 int_inv_obj = np.full(mask.shape, np.nan)
 
