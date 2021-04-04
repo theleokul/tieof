@@ -1,5 +1,9 @@
+import warnings
+
 import numpy as np
 import tensorly as tl
+
+warnings.filterwarnings("ignore", category=RuntimeWarning) 
 
 
 def tensorify(X, y, shape):
@@ -124,8 +128,8 @@ def nrmse(y_hat, y):
     """
         Normalized root mean squared error
     """
-    meaned_sqd_diff = np.mean(np.power(y_hat - y, 2))
-    return np.sqrt(meaned_sqd_diff) / np.std(y)
+    root_meaned_sqd_diff = np.sqrt(np.mean(np.power(y_hat - y, 2)))
+    return root_meaned_sqd_diff / np.std(y)
 
 
 def calculate_mat_energy(mat, s):

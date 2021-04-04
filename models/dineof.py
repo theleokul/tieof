@@ -1,19 +1,22 @@
 import os
 import sys
+
+from tqdm import trange
 import numpy as np
 from scipy.sparse.linalg import svds
 from sklearn.base import BaseEstimator
+
 file_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(file_dir))
 import utils
 
 
 class DINEOF(BaseEstimator):
-    def __init__(self, K, tensor_shape,
+    def __init__(self, R, tensor_shape, mask=None,
                  nitemax=300, toliter=1e-3, tol=1e-8, to_center=True, 
                  keep_non_negative_only=True,
-                 with_energy=True):
-        self.K = K
+                 with_energy=False):
+        self.K = R  # HACK: Make interface consistent with DINEOF3, but want to keep intrinsics as is
         self.nitemax = nitemax
         self.toliter = toliter
         self.tol = tol
@@ -21,6 +24,13 @@ class DINEOF(BaseEstimator):
         self.keep_non_negative_only = keep_non_negative_only
         self.tensor_shape = tensor_shape
         self.with_energy = with_energy
+        self.mask = np.load(mask).astype(bool) if mask is not None else np.ones(tensor_shape, type=bool)
+        self.mask = self._broadcast_mask(self.mask, tensor_shape[-1])
+        self.inverse_mask = ~self.mask
+
+    def _broadcast_mask(self, mask, t):
+        mask = np.repeat(mask[:, :, None], t, axis=2)
+        return utils.rectify_tensor(mask)
         
     def score(self, X, y):
         """
@@ -35,23 +45,24 @@ class DINEOF(BaseEstimator):
         return output
         
     def fit(self, X, y):
-        # X - is a spreadshit in format (lat, lon, t) here
-        # Target of this func to prepare input for _fit
-        tensor = np.full(self.tensor_shape, np.nan)
-        for i, x in enumerate(X):
-            lat, lon, t = x
-            tensor[lat, lon, t] = y[i]
-        
+        tensor = utils.tensorify(X, y, self.tensor_shape)
         self._fit(utils.rectify_tensor(tensor))
         
     def _fit(self, mat):
+        if mat.ndim > 2:
+            mat = utils.rectify_tensor(mat)
+
         if self.to_center:
             mat, *means = utils.center_mat(mat)
 
         # Initial guess
-        nan_mask = np.isnan(mat)
+        nan_mask = np.logical_and(np.isnan(mat), self.mask)
+        non_nan_mask = np.logical_and(~nan_mask, self.mask)
         mat[nan_mask] = 0
+        # Outside of an investigated area everything is considered to be zero
+        mat[self.inverse_mask] = 0 
 
+        pbar = trange(self.nitemax, desc='Reconstruction')
         conv_error = 0
         energy_per_iter = []
         for i in range(self.nitemax):
@@ -63,9 +74,10 @@ class DINEOF(BaseEstimator):
                 energy_per_iter.append(energy_i)
             
             mat_hat = u @ np.diag(s) @ vt
-            mat_hat[~nan_mask] = mat[~nan_mask]
-            diff_in_clouds = mat_hat[nan_mask] - mat[nan_mask]
-            new_conv_error = np.linalg.norm(diff_in_clouds) / np.std(mat[~nan_mask])
+            mat_hat[non_nan_mask] = mat[non_nan_mask]
+            mat_hat[self.inverse_mask] = 0
+
+            new_conv_error = np.sqrt(np.mean(np.power(mat_hat[nan_mask] - mat[nan_mask], 2))) / mat[non_nan_mask].std()
             mat = mat_hat
             if (new_conv_error <= self.toliter) or (abs(new_conv_error - conv_error) < self.toliter):
                 break
@@ -78,6 +90,8 @@ class DINEOF(BaseEstimator):
 
         if self.keep_non_negative_only:
             mat[mat < 0] = 0
+
+        mat[self.inverse_mask] = np.nan
 
         # Save energies in model for distinct components (lat, lon, t)
         if self.with_energy:
