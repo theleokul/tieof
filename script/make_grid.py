@@ -4,6 +4,7 @@ import imageio
 from skimage import io
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torchvision.utils import make_grid, save_image
 
 
@@ -20,6 +21,13 @@ def main():
     args = parse_args()
 
     tensor = torch.tensor(np.load(args.tensor))
+    tensor2 = torch.tensor(np.load('/mss3/baikal/kulikov/modis_aqua/2003/Output_3neighbours/unified_tensor_parafac5.npy'))
+    print('Tensor 1: Min, max, mean, var: ', tensor[~torch.isnan(tensor)].min().item(), tensor[~torch.isnan(tensor)].max().item(), tensor[~torch.isnan(tensor)].mean().item(), tensor[~torch.isnan(tensor)].var().item())
+    print('Tensor 2: Min, max, mean, var: ', tensor2[~torch.isnan(tensor2)].min().item(), tensor2[~torch.isnan(tensor2)].max().item(), tensor2[~torch.isnan(tensor2)].mean().item(), tensor2[~torch.isnan(tensor2)].var().item())
+    print('Difference: ', F.mse_loss(tensor[~torch.isnan(tensor)], tensor2[~torch.isnan(tensor2)]).item())
+    print('Correlation: ', np.corrcoef(tensor[~torch.isnan(tensor)].numpy(), tensor2[~torch.isnan(tensor2)].numpy()))
+
+
     tensor.unsqueeze_(0)  # Add color channel
     tensor = tensor.permute(3, 0, 1, 2)  # Move time to the beginning
     # save_image(tensor, args.out)

@@ -13,8 +13,9 @@ from tensorly.kruskal_tensor import (kruskal_normalise, KruskalTensor)
 from sklearn.base import BaseEstimator
 
 file_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.dirname(file_dir))
-import utils
+sys.path.append(file_dir)
+import model_utils as utils
+
 
 
 class DINEOF3(BaseEstimator):

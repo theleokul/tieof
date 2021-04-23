@@ -1,16 +1,27 @@
+import sys
+import pathlib as pb
 import argparse
+
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import KBinsDiscretizer
-from models import DINEOF, DINEOF3
+
+
+DIR_PATH = pb.Path(__file__).resolve().parent
+ROOT_PATH = DIR_PATH.parent
+sys.path.append(str(ROOT_PATH))
+from model import DINEOF, DINEOF3
+
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DINEOF3 main entry.')
     parser.add_argument('tensor', type=str, help='Path to numpy representation of a tensor to reconstruct')
     parser.add_argument('-O', '--out', type=str, help='Save path for the reconstruction', required=True)
+    parser.add_argument('-t', '--timeline', type=str, help='Path to numpy representation of a timeline', default=None)
     parser.add_argument('-m', '--mask', type=str, help='Path to numpy representation of a mask', default='/mss3/baikal/kulikov/modis_aqua/2003/Input/static_grid/mask.npy')
-    parser.add_argument('-R', '--rank', type=int, help='Rank to use in the decomposition algorithm', default=5)
+    parser.add_argument('--first-day', type=int, default=151)
+    parser.add_argument('-R', '--rank', type=int, help='Rank to use in the decomposition algorithm', default=10)
     parser.add_argument('-L', '--length', type=int, help='Validation length', default=1)
     parser.add_argument('--tensor-shape', nargs=3, type=int, help='Tensor shape', default=[482, 406, 93])
     parser.add_argument('--decomposition-method', type=str, help='truncSVD, truncHOSVD, HOOI or PARAFAC', default='PARAFAC')
@@ -50,30 +61,43 @@ def main():
     mask = np.load(args.mask).astype(bool)
     tensor = np.load(args.tensor)
     tensor[~mask] = np.nan
+
+    # 2D array, where each row is (lat, lon, day)
     X = np.asarray(np.nonzero(~np.isnan(tensor))).T
     y = tensor[tuple(X.T)]
 
-    np.random.seed(args.random_seed)
-    biner = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='kmeans')
-    stratify_y = biner.fit_transform(y[:, None]).flatten().astype(int)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
+    # Timeline correction
+    if args.timeline is not None:
+        print('Timeline correction gets its hands dirty...')
+        normalized_timeline = np.load(args.timeline).flatten() - args.first_day
+        for i, nt in enumerate(normalized_timeline):
+            X[i, 2] += nt - i
+
     print(f'Missing ratio: {(mask.sum() * args.tensor_shape[-1] - y.shape[0]) / (mask.sum() * args.tensor_shape[-1])}')
-    print(f'Train points: {y_train.shape[0]}, val points: {y_val.shape[0]}')
 
-    val_errors = []
-    Rs = list(range(args.rank, args.rank + args.length))
-    for R in Rs:
-        d = get_model(args, R)
-        d.fit(X_train, y_train)
-        val_errors.append(-d.score(X_val, y_val) * y_val.std())
-        print(f'Validation error: {val_errors[-1]}')
+    if args.length > 0:
+        np.random.seed(args.random_seed)
+        biner = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='kmeans')
+        stratify_y = biner.fit_transform(y[:, None]).flatten().astype(int)
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
+        print(f'Train points: {y_train.shape[0]}, val points: {y_val.shape[0]}')
 
-    best_R = Rs[np.argmin(val_errors)]
-    print(f'Best rank: {best_R}')
+        val_errors = []
+        Rs = list(range(args.rank, args.rank + args.length))
+        for R in Rs:
+            d = get_model(args, R)
+            d.fit(X_train, y_train)
+            val_errors.append(-d.score(X_val, y_val) * y_val.std())
+            print(f'Validation error: {val_errors[-1]}')
 
-    if args.refit:
+        best_R = Rs[np.argmin(val_errors)]
+        print(f'Best rank: {best_R}')
+    else:
+        best_R = args.rank
+
+    if args.refit or args.length == 0:
         d = get_model(args, best_R)
-        d._fit(np.load(args.tensor))
+        d.fit(X, y)
 
     np.save(args.out, d.reconstructed_tensor)
     

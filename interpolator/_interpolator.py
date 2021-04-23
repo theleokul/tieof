@@ -1,34 +1,102 @@
 import os
 import re
+import sys
+from pathlib import Path
 
+from loguru import logger
 from tqdm import tqdm
 import netCDF4 as nc
 import geopandas as gp
 from shapely.geometry import MultiPoint
 import numpy as np
 from sklearn import neighbors
-from pathlib import Path
 from oct2py import octave
 
-from . import _utils as utils
+DIR_PATH = Path(__file__).resolve().parent
+GHER_SCRIPTS_DIR_PATH = DIR_PATH / 'gher_scripts'
+sys.path.append(str(DIR_PATH))
+import interpolator_utils as iutils
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-gher_scripts_dir = os.path.join(base_dir, 'gher_scripts')
-octave.addpath(gher_scripts_dir)
+
+octave.addpath(str(GHER_SCRIPTS_DIR_PATH))
 os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'  # HACK: May be useful when NetCDF4 dataset reading raises an exception
 
 
-class DataCook:
-    """
-        Class that cares about data cooking before fitting with gher dineof
-    """
-    def __init__(self, shape_file, raw_data_dir, investigated_obj):
+
+class Interpolator:
+
+    def __init__(
+        self
+        , shape_file: str  # path tp .shp file
+        , raw_data_dir: str  # input_dir filepath with .nc datasets you desire to interpolate
+        , investigated_obj: str  # something to extract out of .nc files ('chlor_a' for example)
+
+        # All the files related to interpolation are created inside raw_data_dir
+        , static_grid_stem: str='static_grid' 
+        , interpolated_stem: str='interpolated'
+        , unified_tensor_stem: str='unified_tensor'
+        , timeline_stem: str='timeline'
+    ):
+
         self.shape_file = os.path.abspath(shape_file)
         self.raw_data_dir = os.path.abspath(raw_data_dir)
         self.investigated_obj = investigated_obj
+        self.static_grid_stem = static_grid_stem
+        self.interpolated_stem = interpolated_stem
+        self.unified_tensor_stem = unified_tensor_stem
+        self.timeline_stem = timeline_stem
+
+    def fit(
+            self,
+            interpolation_strategy='radius',
+            fullness_threshold=0.0,
+            remove_low_fullness=False,
+            force_static_grid_touch=False,
+            day_bounds_to_preserve=(151, 244),  # (151, 244) - summer
+            keep_only_best_day=True,
+            resolution=1,
+            move_time_axis_in_unified_tensor_to_end=True,
+            create_dat_copies=True
+    ):
+        """
+            Fit the interpolator, i.e. create static_grid, interpolated tensors and timeline.
+
+            Arguments:
+            
+                * fullness_threshold - minimal proporion of observed data to keep data
+                * remove_low_fullness - if True: remove raw_inv_obj from raw_data_dir
+                * force_static_grid_touch - if True: create a static grid if it already exists
+                * day_bounds_to_preserve - Delete all data for days outside of this bounds.
+                                          WARNING: Actually deletes the data with rm system calls.
+                * create_dat_copies - by default only .npy tensors are created, this option duplicates the content 
+                                      to .dat files (typically used with fortran software)
+        """
+
+        self.touch_static_grid(force_static_grid_touch, resolution)
+        self.npy_to_dat(self.get_static_grid_mask_path(extension='npy'),
+                        self.get_static_grid_path())
+
+        if day_bounds_to_preserve is not None:
+            assert len(day_bounds_to_preserve) == 2
+            day_range_to_preserve = range(day_bounds_to_preserve[0], day_bounds_to_preserve[1])
+            self.preserve_day_range_only(day_range_to_preserve)
+
+        self.touch_interpolated_data(fullness_threshold, remove_low_fullness, interpolation_strategy)
+
+        if keep_only_best_day:
+            self.preserve_best_day_only()
+
+        self.touch_unified_tensor(move_time_axis_in_unified_tensor_to_end)
+        self.touch_timeline()
+
+        if create_dat_copies:
+            self.npy_to_dat(self.get_unified_tensor_path(extension='npy'),
+                            self.get_interpolated_path())
+            self.npy_to_dat(self.get_timeline_path(extension='npy'),
+                            self.get_interpolated_path())
 
     def get_static_grid_path(self):
-        return os.path.join(self.raw_data_dir, 'static_grid')
+        return os.path.join(self.raw_data_dir, self.static_grid_stem)
 
     def get_static_grid_mask_path(self, extension='npy'):
         return os.path.join(self.get_static_grid_path(), f'mask.{extension}')
@@ -52,27 +120,28 @@ class DataCook:
         return self.get_lons(), self.get_lats(), self.get_mask()
 
     def get_interpolated_path(self):
-        return os.path.join(self.raw_data_dir, 'interpolated')
+        return os.path.join(self.raw_data_dir, self.interpolated_stem)
 
     def get_timeline_path(self, extension='npy'):
-        return os.path.join(self.get_interpolated_path(), f'timeline.{extension}')
+        return os.path.join(self.get_interpolated_path(), f'{self.timeline_stem}.{extension}')
 
     def get_timeline(self):
         timeline = np.load(self.get_timeline_path())
         return timeline
 
     def get_unified_tensor_path(self, extension='npy'):
-        return os.path.join(self.get_interpolated_path(), f'unified_tensor.{extension}')
+        return os.path.join(self.get_interpolated_path(), f'{self.unified_tensor_stem}.{extension}')
 
     def get_unified_tensor(self, apply_log_scale=False, small_chunk_to_add=0):
         unified_tensor = np.load(self.get_unified_tensor_path()) + small_chunk_to_add
         if apply_log_scale:
-            unified_tensor = utils.apply_log_scale(unified_tensor)
+            unified_tensor = iutils.apply_log_scale(unified_tensor)
 
         return unified_tensor
 
     def touch_static_grid(self, force_static_grid_touch, resolution):
         """Generate spatial grid"""
+
         static_grid_dir = self.get_static_grid_path()
         lons_path = os.path.join(static_grid_dir, 'lons.npy')
         lats_path = os.path.join(static_grid_dir, 'lats.npy')
@@ -98,7 +167,7 @@ class DataCook:
 
         mask = np.zeros(shape=(spar_lon * spar_lat), dtype=np.float)
 
-        print(f'Forming static grid (shape: {spar_lat}x{spar_lon}).')
+        logger.info(f'Forming static grid (shape: {spar_lat}x{spar_lon}).')
         for i, p in tqdm(enumerate(points), total=static_grid_size):
             if loc.intersects(p):
                 mask[i] = 1
@@ -107,17 +176,17 @@ class DataCook:
         os.makedirs(static_grid_dir, exist_ok=True)
 
         np.save(lons_path, lons)
-        print(f'lons.npy are created here: {lons_path}')
+        logger.info(f'lons.npy are created here: {lons_path}')
 
         np.save(lats_path, lats)
-        print(f'lats.npy are created here: {lats_path}')
+        logger.info(f'lats.npy are created here: {lats_path}')
 
         np.save(mask_path, mask)
-        print(f'mask.npy is created here: {mask_path}')
+        logger.info(f'mask.npy is created here: {mask_path}')
 
     def read_raw_data_files(self):
-        data_files = utils.ls(self.raw_data_dir)
-        utils.guard(all(d.split('.')[-1] == 'nc' for d in data_files), 'NetCDF format is only supported format')
+        data_files = iutils.ls(self.raw_data_dir)
+        iutils.guard(all(d.split('.')[-1] == 'nc' for d in data_files), 'NetCDF format is only supported format')
 
         for raw_data_file in data_files:
             ds = nc.Dataset(raw_data_file, mode='r')
@@ -148,7 +217,7 @@ class DataCook:
 
         return np.logical_and(matrix > b_low, matrix < b_high)
 
-    def interpolate_raw_data_obj(self, raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask):
+    def interpolate_raw_data_obj(self, raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask, interpolation_strategy):
         # Static grid
         static_grid_dir = self.get_static_grid_path()
         static_lons = np.load(os.path.join(static_grid_dir, 'lons.npy'))
@@ -183,7 +252,7 @@ class DataCook:
         # I do not consider diagonal points, because according to a + b < c, they are higher
         min_grid_distance_lon = abs(static_lons[0][0] - static_lons[0][1])
         min_grid_distance_lat = abs(static_lats[0][0] - static_lats[1][0])
-        min_grid_distance = utils.floor_float(np.min([min_grid_distance_lat, min_grid_distance_lon]))
+        min_grid_distance = iutils.floor_float(np.min([min_grid_distance_lat, min_grid_distance_lon]))
 
         # Select points to be interpolated that lie in min grid distance radius from raw data
         tree = neighbors.KDTree(raw_lons_lats_known, leaf_size=2)
@@ -196,7 +265,13 @@ class DataCook:
 
         # Interpolate filtered nodes, find value based on raw data
         # knr = neighbors.KNeighborsRegressor(n_neighbors=3, weights='distance')
-        knr = neighbors.RadiusNeighborsRegressor(radius=min_grid_distance * 5., weights='distance')   # ~ 5 km
+        if interpolation_strategy == 'radius':
+            knr = neighbors.RadiusNeighborsRegressor(radius=min_grid_distance * 5., weights='distance')   # ~ 5 km
+        elif interpolation_strategy == 'neighbours':
+            knr = neighbors.KNeighborsRegressor(n_neighbors=3, weights='distance')
+        else:
+            raise NotImplementedError()
+
         knr.fit(raw_lons_lats_known, raw_inv_obj_known)
 
         # static_mask - shape of the lake, int_inv_obj_mask - points where we can interpolate
@@ -210,7 +285,13 @@ class DataCook:
 
         return int_inv_obj
 
-    def touch_interpolated_data(self, fullness_threshold, remove_low_fullness):
+    def touch_interpolated_data(
+        self
+        , fullness_threshold
+        , remove_low_fullness
+        , interpolation_strategy  # Either radius or neighbours
+    ):
+
         """
             Interpolate raw data in raw_data_dir to static grid into raw_data_dir/interpolated
         """
@@ -218,8 +299,8 @@ class DataCook:
         interpolated_dir = self.get_interpolated_path()
         os.makedirs(interpolated_dir, exist_ok=True)
 
-        print('Interpolating data.')
-        raw_data_files_count = len(utils.ls(self.raw_data_dir))
+        logger.info('Interpolating data.')
+        raw_data_files_count = len(iutils.ls(self.raw_data_dir))
         for i, (raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask, raw_data_file) in tqdm(enumerate(self.read_raw_data_files()),
                                                                                           total=raw_data_files_count):
             raw_data_file_stem = Path(raw_data_file).stem
@@ -228,10 +309,10 @@ class DataCook:
                 continue
 
             try:
-                int_inv_obj = self.interpolate_raw_data_obj(raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask)
-                fullness = utils.calculate_fullness(int_inv_obj, mask)
+                int_inv_obj = self.interpolate_raw_data_obj(raw_lons, raw_lats, raw_inv_obj, raw_inv_obj_mask, interpolation_strategy)
+                fullness = iutils.calculate_fullness(int_inv_obj, mask)
             except Exception as e:
-                print(f'{i} is empty. {e}')
+                logger.warning(f'{i} is empty. {e}')
                 fullness = 0
                 int_inv_obj = np.full(mask.shape, np.nan)
 
@@ -242,11 +323,11 @@ class DataCook:
 
             np.save(os.path.join(interpolated_dir, f'{raw_data_file_stem}.npy'), int_inv_obj)
 
-        print(f'Interpolation is completed, interpolated data is here: {interpolated_dir}')
+        logger.success(f'Interpolation is completed, interpolated data is here: {interpolated_dir}')
 
     def preserve_day_range_only(self, day_range):
-        data_files = utils.ls(self.raw_data_dir)
-        utils.guard(all(d.split('.')[-1] == 'nc' for d in data_files), 'NetCDF format is only supported format')
+        data_files = iutils.ls(self.raw_data_dir)
+        iutils.guard(all(d.split('.')[-1] == 'nc' for d in data_files), 'NetCDF format is only supported format')
 
         final_data_files = []
         for day in day_range:
@@ -261,7 +342,7 @@ class DataCook:
         for f in files_to_del:
             os.remove(f)
 
-        print(f'Day range: {day_range} is only kept in {self.raw_data_dir}.')
+        logger.info(f'Day range: {day_range} is only kept in {self.raw_data_dir}.')
 
     def preserve_best_day_only(self):
         """
@@ -271,16 +352,16 @@ class DataCook:
             .npy extension is only supported.
         """
         static_grid_dir_path = self.get_static_grid_path()
-        utils.guard(os.path.isdir(static_grid_dir_path), 'Run touch_static_grid() before this.')
+        iutils.guard(os.path.isdir(static_grid_dir_path), 'Run touch_static_grid() before this.')
 
         int_data_dir_path = self.get_interpolated_path()
-        utils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
+        iutils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
 
         mask_path = self.get_static_grid_mask_path()
         geo_obj_mask = np.load(mask_path)
 
-        data_files = [f for f in utils.ls(int_data_dir_path) if 'unified' not in f and 'timeline' not in f]
-        utils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]),
+        data_files = [f for f in iutils.ls(int_data_dir_path) if self.unified_tensor_stem not in f and self.timeline_stem not in f]
+        iutils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]),
                     'Interpolated chunks in interpolated/ should have .npy ext')
 
         final_data_files = []
@@ -296,9 +377,9 @@ class DataCook:
 
             datasets = [np.load(f) for f in filtered_data_files]
 
-            fullness, best_file = utils.calculate_fullness(datasets[0], geo_obj_mask), filtered_data_files[0]
+            fullness, best_file = iutils.calculate_fullness(datasets[0], geo_obj_mask), filtered_data_files[0]
             for i, d in enumerate(datasets[1:], 1):
-                new_fullness = utils.calculate_fullness(d, geo_obj_mask)
+                new_fullness = iutils.calculate_fullness(d, geo_obj_mask)
                 if new_fullness > fullness:
                     fullness = new_fullness
                     best_file = filtered_data_files[i]
@@ -311,7 +392,7 @@ class DataCook:
         for f in files_to_del:
             os.remove(f)
 
-        print(f'Best day is only kept in {int_data_dir_path}.')
+        logger.info(f'Best day is only kept in {int_data_dir_path}.')
 
     def touch_unified_tensor(self, move_new_axis_to_end):
         """
@@ -319,10 +400,10 @@ class DataCook:
             in the same directory as unified.npy
         """
         int_data_dir_path = self.get_interpolated_path()
-        utils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
+        iutils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
 
-        data_files = [f for f in utils.ls(int_data_dir_path) if 'unified' not in f and 'timeline' not in f]
-        utils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]), 'Files in dir_path should have .npy ext')
+        data_files = [f for f in iutils.ls(int_data_dir_path) if self.unified_tensor_stem not in f and self.timeline_stem not in f]
+        iutils.guard(all([f.split('.')[-1] == 'npy' for f in data_files]), 'Files in dir_path should have .npy ext')
 
         unified_tensor = []
         for f in data_files:
@@ -333,9 +414,9 @@ class DataCook:
         if move_new_axis_to_end:
             unified_tensor = np.moveaxis(unified_tensor, 0, -1)
 
-        unified_tensor_path = os.path.join(int_data_dir_path, 'unified_tensor.npy')
+        unified_tensor_path = self.get_unified_tensor_path(extension='npy')
         np.save(unified_tensor_path, unified_tensor)
-        print(f'unified_tensor.npy is created here: {unified_tensor_path}')
+        logger.info(f'unified_tensor is created here: {unified_tensor_path}')
 
     def touch_timeline(self):
         """
@@ -345,9 +426,9 @@ class DataCook:
             of interpolated in format *YYYYDDD*
         """
         int_data_dir_path = self.get_interpolated_path()
-        utils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
+        iutils.guard(os.path.isdir(int_data_dir_path), 'Run touch_interpolated_data() before this.')
 
-        filenames = [f for f in utils.ls(int_data_dir_path) if 'unified' not in f and 'timeline' not in f]
+        filenames = [f for f in iutils.ls(int_data_dir_path) if self.unified_tensor_stem not in f and self.timeline_stem not in f]
         timeline = []
         for f in filenames:
             m = re.search(r'\d{4}(\d{3})', f)
@@ -356,9 +437,9 @@ class DataCook:
 
         timeline = np.array([timeline], dtype=np.float)
 
-        timeline_path = os.path.join(int_data_dir_path, 'timeline.npy')
+        timeline_path = self.get_timeline_path(extension='npy')
         np.save(timeline_path, timeline)
-        print(f'timeline.npy is created here: {timeline_path}')
+        logger.info(f'timeline is created here: {timeline_path}')
 
     @staticmethod
     def npy_to_dat(npy_path, dat_path):
@@ -369,7 +450,7 @@ class DataCook:
             dat_path - can be a regular path or a directory.
         """
         if os.path.isfile(npy_path):
-            utils.guard(npy_path.split('.')[-1] == 'npy', 'npy_path should have .npy ext')
+            iutils.guard(npy_path.split('.')[-1] == 'npy', 'npy_path should have .npy ext')
             d = np.load(npy_path)
 
             if dat_path.split('.')[-1] == 'dat':
@@ -380,9 +461,8 @@ class DataCook:
                 # dat_path is a directory
                 os.makedirs(dat_path, exist_ok=True)
                 dat_path = os.path.join(dat_path, f'{Path(npy_path).stem}.dat')
-
                 octave.gwrite(dat_path, d)
-            print(f'{Path(dat_path).stem}.dat is created here: {dat_path}')
+            logger.info(f'{Path(dat_path).stem}.dat is created here: {dat_path}')
         elif os.path.isdir(npy_path):
             raise Exception('npy_to_dat for directories is not implemented')
         else:
@@ -409,7 +489,7 @@ class DataCook:
 
                 d = octave.gread(dat_path)
                 np.save(npy_path, d)
-            print(f'{Path(npy_path).stem}.npy is created here: {npy_path}')
+            logger.info(f'{Path(npy_path).stem}.npy is created here: {npy_path}')
         elif os.path.isdir(npy_path):
             raise Exception('dat_to_npy for directories is not implemented')
         else:

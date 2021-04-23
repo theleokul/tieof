@@ -1,0 +1,23 @@
+# Investigated object in the .nc dataset (e.x. 'chlor_a')
+investigated_obj: "chlor_a"
+
+# Shape of the area we want to care about
+shape_file_path: "test/shapes/baikal/baikal.shp"
+
+fullness_threshold: 0.0
+
+remove_low_fullness: False
+
+force_static_grid_touch: False
+
+day_bounds_to_preserve: [151, 244]  # [151, 244] - summer
+
+keep_only_best_day: True
+
+resolution: 1
+
+# If you want to move time axis in unified tensor to the end of its shape, place 1, otherwise place 0, and
+# time axis will be placed in the beginning
+move_time_axis_in_unified_tensor_to_end: True
+
+create_dat_copies: True
