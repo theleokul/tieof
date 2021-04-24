@@ -10,7 +10,7 @@ import numpy as np
 
 ROOT_PATH = pb.Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT_PATH))
-import models.models_utils as mutils
+import model.model_utils as mutils
 import interpolator._interpolator as I
 
 

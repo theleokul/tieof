@@ -18,7 +18,7 @@ def load_config(config_path):
     return config
 
 
-def parse_satellite(base_dir, input_stem, only_years=None):
+def parse_satellite(base_dir, input_stem, output_stem=None, only_years=None):
     """Get input and output dirs from a specified satellite's base_dir"""
     years = os.listdir(base_dir)
 
@@ -31,4 +31,11 @@ def parse_satellite(base_dir, input_stem, only_years=None):
 
     input_dirs = [os.path.join(base_dir, y, input_stem) for y in years]
 
-    return input_dirs
+    output = input_dirs
+    if output_stem is not None:
+        output_dirs = [os.path.join(base_dir, y, output_stem) for y in years]
+        for o in output_dirs:
+            os.makedirs(o, exist_ok=True)
+        output = input_dirs, output_dirs
+
+    return output

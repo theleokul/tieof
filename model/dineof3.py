@@ -3,6 +3,7 @@ import sys
 from functools import reduce
 
 from tqdm import trange
+from loguru import logger
 import numpy as np
 from scipy.sparse.linalg import svds
 import tensorly as tl
@@ -93,6 +94,8 @@ class DINEOF3(BaseEstimator):
             tensor = tensor_hat
 
             pbar.set_postfix(error=new_conv_error, rel_error=abs(new_conv_error - conv_error))
+
+            logger.info(f'Error/Relative Error at iteraion {i}: {new_conv_error}, {abs(new_conv_error - conv_error)}')
 
             if (new_conv_error <= self.toliter) or (abs(new_conv_error - conv_error) < self.toliter):
                 break
