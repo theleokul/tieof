@@ -30,6 +30,7 @@ class Interpolator:
         , shape_file: str  # path tp .shp file
         , raw_data_dir: str  # input_dir filepath with .nc datasets you desire to interpolate
         , investigated_obj: str  # something to extract out of .nc files ('chlor_a' for example)
+        , investigated_obj__threshold=np.inf
 
         # All the files related to interpolation are created inside raw_data_dir
         , static_grid_stem: str='static_grid' 
@@ -41,6 +42,7 @@ class Interpolator:
         self.shape_file = os.path.abspath(shape_file)
         self.raw_data_dir = os.path.abspath(raw_data_dir)
         self.investigated_obj = investigated_obj
+        self.investigated_obj__threshold = investigated_obj__threshold
         self.static_grid_stem = static_grid_stem
         self.interpolated_stem = interpolated_stem
         self.unified_tensor_stem = unified_tensor_stem
@@ -243,6 +245,14 @@ class Interpolator:
         raw_lons_lats_known = np.c_[raw_lons_known, raw_lats_known]
         raw_inv_obj_known = raw_inv_obj[raw_inv_obj_mask]
 
+        logger.info(f'Original investigated object statistics: \
+            \nmin: {raw_inv_obj_known.min()}, \nmax: {raw_inv_obj_known.max()}, \
+            \nmean: {raw_inv_obj_known.mean()}, \nmedian: {np.median(raw_inv_obj_known)}')
+
+        if np.isfinite(self.investigated_obj__threshold):
+            raw_inv_obj_known = np.clip(raw_inv_obj_known, 0, self.investigated_obj__threshold)
+            logger.info(f'Original investigated object is clipped to: 0. - {self.investigated_obj__threshold}')
+
         # Grid on which we will interpolate
         int_lons_lats = np.c_[static_lons.flatten(), static_lats.flatten()]
         int_inv_obj_mask = np.zeros(shape=(int_lons_lats.shape[0]), dtype=np.bool)
@@ -278,6 +288,11 @@ class Interpolator:
         int_inv_obj_mask = np.logical_and(static_mask, int_inv_obj_mask)
         int_lons_lats_known = int_lons_lats[int_inv_obj_mask.flatten()]
         int_inv_obj_known = knr.predict(int_lons_lats_known)
+
+        # HACK: Tp be safe that indeed borders are correct
+        int_inv_obj_known = np.clip(int_inv_obj_known, 0, self.investigated_obj__threshold)
+        assert int_inv_obj_known.min() >= 0 \
+            and int_inv_obj_known.max() <= self.investigated_obj__threshold
 
         # Reconstruct int_inv_obj
         int_inv_obj = np.full(static_lons.shape, np.nan)

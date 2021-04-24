@@ -15,13 +15,12 @@ from loguru import logger
 
 DIR_PATH = pb.Path(__file__).resolve().parent
 ROOT_PATH = DIR_PATH.parent
+# HACK: For ray to be able to import from parent directory
+os.environ["PYTHONPATH"] = str(ROOT_PATH) + ":" + os.environ.get("PYTHONPATH", "")
 sys.path.append(str(ROOT_PATH))
 import script.script_utils as sutils
 from interpolator import _interpolator as I
 
-"""
-    Current limitation: Ray interface can only be launched from the root.
-"""
 
 
 def parse_args() -> T.Union[ap.Namespace, T.List[ap.Namespace]]:
@@ -33,7 +32,7 @@ def parse_args() -> T.Union[ap.Namespace, T.List[ap.Namespace]]:
                         , type=str
                         , help='Path to .csv file with key-value pairs that maps satellites to base dirs'
                         , default='/home/kulikov/dineof3/test/satellite_descriptor.csv')
-    parser.add_argument('--only-years', type=str, nargs='+', default='Used only with --satellite to interpolate only specified years.')
+    parser.add_argument('--only-years', type=str, nargs='+', default=None)
     parser.add_argument('--input-stem', type=str, default='Input')
     parser.add_argument('--static-grid-stem', type=str, default='static_grid')
     parser.add_argument('--interpolated-stem', type=str, default='interpolated')
@@ -47,7 +46,7 @@ def parse_args() -> T.Union[ap.Namespace, T.List[ap.Namespace]]:
     config = sutils.load_config(args.config)
     setattr(config, 'process_count', args.process_count)
     setattr(config, 'logs', args.logs)
-    os.makedirs(args.logs, exist_ok=True)
+    os.makedirs(config.logs, exist_ok=True)
     
     if args.input_dir is not None:
         setattr(config, 'input_dir', args.input_dir)
@@ -89,6 +88,8 @@ def _main_atom(config):
         , format='{time} {level} {message}'
     )
 
+    logger.info(f'Config: {config}')
+
     interp = I.Interpolator(
         shape_file=config.shape_file_path
         , raw_data_dir=config.input_dir
@@ -97,6 +98,7 @@ def _main_atom(config):
         , interpolated_stem=config.interpolated_stem
         , unified_tensor_stem=config.unified_tensor_stem
         , timeline_stem=config.timeline_stem
+        , investigated_obj__threshold=config.investigated_obj__threshold
     )
     interp.fit(
         interpolation_strategy=config.interpolation_strategy,
@@ -109,9 +111,6 @@ def _main_atom(config):
         move_time_axis_in_unified_tensor_to_end=config.move_time_axis_in_unified_tensor_to_end,
         create_dat_copies=config.create_dat_copies
     )
-
-# @ray.remote(num_cpus=1, num_workers=1)
-# class MainAtomRayActor:
 
 
 @ray.remote
