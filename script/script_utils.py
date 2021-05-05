@@ -7,8 +7,10 @@ import argparse
 import yaml
 import numpy as np
 import tensorly as tl
+from tqdm import tqdm
 
 warnings.filterwarnings("ignore", category=RuntimeWarning) 
+
 
 
 def load_config(config_path):
@@ -38,4 +40,50 @@ def parse_satellite(base_dir, input_stem, output_stem=None, only_years=None):
             os.makedirs(o, exist_ok=True)
         output = input_dirs, output_dirs
 
+    return output
+
+
+def repeated(func, X, nb_iter=30, random_state=None, verbose=0, mode='bootstrap', **func_kw):
+    if random_state is None:
+        rng = np.random
+    else:
+        rng = np.random.RandomState(random_state)
+    nb_examples = X.shape[0]
+    results = []
+
+    iters = range(nb_iter)
+    if verbose > 0:
+        iters = tqdm(iters)    
+    for i in iters:
+        if mode == 'bootstrap':
+            Xr = X[rng.randint(0, nb_examples, size=nb_examples)]
+        elif mode == 'shuffle':
+            ind = np.arange(nb_examples)
+            rng.shuffle(ind)
+            Xr = X[ind]
+        elif mode == 'same':
+            Xr = X
+        else:
+            raise ValueError('unknown mode : {}'.format(mode))
+        results.append(func(Xr, **func_kw))
+    return results
+
+
+def bootstrap(*arrays, rng=None, keep_unique_only=True):
+    if rng is None:
+        rng = np.random
+        
+    nb_examples = arrays[0].shape[0]
+    
+    bootstrapped_inds = rng.randint(0, nb_examples, size=nb_examples)
+    if keep_unique_only:
+        bootstrapped_inds = np.unique(bootstrapped_inds)
+    
+    new_arrays = [arr[bootstrapped_inds] for arr in arrays]
+    
+    if len(new_arrays) > 1:
+        output = new_arrays
+    else:
+        output = new_arrays[0]
+        
     return output

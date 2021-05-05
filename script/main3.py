@@ -42,7 +42,10 @@ def parse_args():
     parser.add_argument('--nitemax', type=int, default=None)
     parser.add_argument('--refit', type=bool, default=None)
     parser.add_argument('--lat-lon-sep-centering', type=bool, default=None)
+    parser.add_argument('--early-stopping', type=bool, default=None)
     parser.add_argument('--random-seed', type=int, default=None)
+    parser.add_argument('--trials', type=int, default=None)
+    parser.add_argument('--start-trial', type=int, default=None)
     parser.add_argument('--val-size', type=float, default=None)
     parser.add_argument('--logs', type=str, default=None)
 
@@ -119,6 +122,7 @@ def get_model(args, R):
             , nitemax=args.nitemax
             , lat_lon_sep_centering=args.lat_lon_sep_centering
             , mask=args.mask
+            , early_stopping=args.early_stopping
         )
     
     return d
@@ -138,62 +142,106 @@ def _main_atom(args):
 
     # Wrap contents into another function to catch exceptions to log files
     @logger.catch(reraise=True)
-    def _main_atom_():
-        mask = np.load(args.mask).astype(bool)
-        tensor = np.load(args.tensor)
-        tensor[~mask] = np.nan
+    def _main_atom_(X, y, base_stat):
+        logger.info('### Calling _main_atom_ ###')
 
-        # 2D array, where each row is (lat, lon, day)
-        X = np.asarray(np.nonzero(~np.isnan(tensor))).T
-        y = tensor[tuple(X.T)]
+        base_stat = copy.deepcopy(base_stat)
+        stats = []
+        
+        assert args.length > 0
+        
+        np.random.seed(args.random_seed)
+        biner = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='kmeans')
+        stratify_y = biner.fit_transform(y[:, None]).flatten().astype(int)
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
+        logger.info(f'Train points: {y_train.shape[0]}, val points: {y_val.shape[0]}')
+        
+        base_stat['train_points_num'] = y_train.shape[0]
+        base_stat['val_points_num'] = y_val.shape[0]
 
-        # Timeline correction
-        if args.timeline is not None:
-            logger.info('Timeline correction gets its hands dirty...')
-            normalized_timeline = np.load(args.timeline).flatten() - args.first_day
-            logger.info(f'Normalized timeline: {list(normalized_timeline)}')
-            for i, nt in enumerate(normalized_timeline):
-                X[:, 2][X[:, 2] == i] = nt
+        val_nrmses = []
+        Rs = list(range(args.rank, args.rank + args.length))
+        for R in Rs:
+            d = get_model(args, R)
+            d.fit(X_train, y_train)
+            
+            rmse = d.rmse(X_val, y_val)
+            nrmse = d.nrmse(X_val, y_val)
+            
+            stat = copy.deepcopy(base_stat)
+            stat['rank'] = R
+            stat['rmse'] = rmse
+            stat['nrmse'] = nrmse
+            stat['conv_error'] = d.conv_error
+            stat['grad_conv_error'] = d.grad_conv_error
+            stat['final_iter'] = d.final_iter
+            stats.append(stat)
+            
+            val_nrmses.append(nrmse)
+            
+            logger.info(f'Validation rmse: {rmse}')
+            logger.info(f'Validation nrmse: {nrmse}')
 
-        logger.info(f'Missing ratio: {(mask.sum() * args.tensor_shape[-1] - y.shape[0]) / (mask.sum() * args.tensor_shape[-1])}')
+        best_R = Rs[np.argmin(val_nrmses)]
+        best_nrmse = np.min(val_nrmses)
+        logger.success(f'Best rank: {best_R}')
+        logger.success(f'Lowest validation nrmse: {best_nrmse}')
 
-        if args.length > 0:
-            np.random.seed(args.random_seed)
-            biner = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='kmeans')
-            stratify_y = biner.fit_transform(y[:, None]).flatten().astype(int)
-            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
-            logger.info(f'Train points: {y_train.shape[0]}, val points: {y_val.shape[0]}')
-
-            val_errors = []
-            Rs = list(range(args.rank, args.rank + args.length))
-            for R in Rs:
-                d = get_model(args, R)
-                d.fit(X_train, y_train)
-                val_errors.append(-d.score(X_val, y_val) * y_val.std())
-                logger.info(f'Validation error: {val_errors[-1]}')
-
-            best_R = Rs[np.argmin(val_errors)]
-            best_val_error = np.min(val_errors)
-            logger.success(f'Best rank: {best_R}')
-            logger.success(f'Lowest validation error: {best_val_error}')
-        else:
-            best_R = args.rank
-            best_val_error = None
-
-        if args.refit or args.length == 0:
+        if args.refit:  #  or args.length == 0:
             d = get_model(args, best_R)
             d.fit(X, y)
+            out = f'{args.out}_{best_R}_{best_nrmse:.4f}.npy'
+            np.save(out, d.reconstructed_tensor)
+            logger.success(f'Final reconstruction saved to: {out}')
+        
+        return stats
 
-        if best_val_error is not None:
-            out = f'{args.out}_{best_R}_{best_val_error:.4f}.npy'
+    # Prepare tensor
+    mask = np.load(args.mask).astype(bool)
+    tensor = np.load(args.tensor)
+    tensor[~mask] = np.nan
+    
+    # Extract features
+    # 2D array, where each row is (lat, lon, day)
+    X = np.asarray(np.nonzero(~np.isnan(tensor))).T
+    y = tensor[tuple(X.T)]
+    
+    # Timeline correction
+    if args.timeline is not None:
+        normalized_timeline = np.load(args.timeline).flatten() - args.first_day
+        for i, nt in enumerate(normalized_timeline):
+            X[:, 2][X[:, 2] == i] = nt
+            
+    # Build base_stat
+    base_stat = {
+        'year': year
+        , 'masked_points_num': mask.sum() * args.tensor_shape[-1]
+    }
+
+    stats = []
+    rng = np.random.RandomState(args.random_seed)
+    for t in range(args.start_trial, args.trials):
+        if t < 1:
+            Xb, yb = copy.deepcopy(X), copy.deepcopy(y)
         else:
-            out = f'{args.out}_{best_R}.npy'
-
-        np.save(out, d.reconstructed_tensor)
-        logger.success(f'Final reconstruction saved to: {out}')
-
-    _main_atom_()
-
+            Xb, yb = sutils.bootstrap(X, y, rng=rng, keep_unique_only=True)
+            
+        base_statb = copy.deepcopy(base_stat)
+        base_statb['trial'] = t
+        base_statb['known_points_num'] = yb.shape[0]
+        base_statb['missing_ratio'] = (mask.sum() * args.tensor_shape[-1] - yb.shape[0]) / (mask.sum() * args.tensor_shape[-1])
+            
+        statsb = _main_atom_(Xb, yb, base_statb)
+        stats.extend(statsb)
+        
+        df = pd.DataFrame(statsb)
+        output_path = f"{args.out}_{args.interpolated_stem}_{'es' if args.early_stopping else 'nes'}_trial_{t:02d}.csv"
+        df.to_csv(output_path, index=False)
+        
+    df = pd.DataFrame(stats)
+    output_path = f"{args.out}_{args.interpolated_stem}_{'es' if args.early_stopping else 'nes'}.csv"
+    df.to_csv(output_path, index=False)
+        
 
 @ray.remote
 def _main_atom_ray(*args, **kwargs):

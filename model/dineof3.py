@@ -25,7 +25,8 @@ class DINEOF3(BaseEstimator):
                  nitemax=300, toliter=1e-3, tol=1e-8, to_center=True,
                  keep_non_negative_only=True,
                  with_energy=False,
-                 lat_lon_sep_centering=True):
+                 lat_lon_sep_centering=True,
+                 early_stopping=True):
         self.R = R
         self.decomp_type = decomp_type
         self.td_iter_max = td_iter_max
@@ -39,10 +40,17 @@ class DINEOF3(BaseEstimator):
         self.lat_lon_sep_centering = lat_lon_sep_centering
         self.mask = np.load(mask).astype(bool) if mask is not None else np.ones(tensor_shape, type=bool)
         self.inverse_mask = ~self.mask
+        self.early_stopping = early_stopping
 
     def score(self, X, y):
         y_hat = self.predict(X)
         return -utils.nrmse(y_hat, y)
+    
+    def rmse(self, X, y):
+        return -self.score(X, y) * y.std()
+    
+    def nrmse(self, X, y):
+        return -self.score(X, y)
 
     def predict(self, X):
         output = np.array([self.reconstructed_tensor[x[0], x[1], x[2]] for x in X.astype(np.int)])
@@ -97,9 +105,16 @@ class DINEOF3(BaseEstimator):
 
             logger.info(f'Error/Relative Error at iteraion {i}: {new_conv_error}, {abs(new_conv_error - conv_error)}')
 
-            if (new_conv_error <= self.toliter) or (abs(new_conv_error - conv_error) < self.toliter):
-                break
+            grad_conv_error = abs(new_conv_error - conv_error)
             conv_error = new_conv_error
+            
+            if self.early_stopping:
+                break_condition = (conv_error <= self.toliter) or (grad_conv_error < self.toliter)
+            else:
+                break_condition = (conv_error <= self.toliter)
+                
+            if break_condition:              
+                break
 
         energy_per_iter = np.array(energy_per_iter)
 
@@ -121,6 +136,7 @@ class DINEOF3(BaseEstimator):
 
         self.final_iter = i
         self.conv_error = conv_error
+        self.grad_conv_error = grad_conv_error
         self.reconstructed_tensor = tensor
         self.core_tensor = G
         self.factors = A

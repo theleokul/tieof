@@ -9,3 +9,4 @@ venv
 *.csv
 *.sh
 octave-workspace
+.vscode
