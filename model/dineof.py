@@ -2,6 +2,7 @@ import os
 import sys
 
 from tqdm import trange
+from loguru import logger
 import numpy as np
 from scipy.sparse.linalg import svds
 from sklearn.base import BaseEstimator
@@ -16,7 +17,8 @@ class DINEOF(BaseEstimator):
     def __init__(self, R, tensor_shape, mask=None,
                  nitemax=300, toliter=1e-3, tol=1e-8, to_center=True, 
                  keep_non_negative_only=True,
-                 with_energy=False):
+                 with_energy=False,
+                 early_stopping=True):
         self.K = R  # HACK: Make interface consistent with DINEOF3, but want to keep intrinsics as is
         self.nitemax = nitemax
         self.toliter = toliter
@@ -28,6 +30,7 @@ class DINEOF(BaseEstimator):
         self.mask = np.load(mask).astype(bool) if mask is not None else np.ones(tensor_shape, type=bool)
         self.mask = self._broadcast_mask(self.mask, tensor_shape[-1])
         self.inverse_mask = ~self.mask
+        self.early_stopping = early_stopping
 
     def _broadcast_mask(self, mask, t):
         mask = np.repeat(mask[:, :, None], t, axis=2)
@@ -40,6 +43,12 @@ class DINEOF(BaseEstimator):
         """
         y_hat = self.predict(X)
         return -utils.nrmse(y_hat, y)
+    
+    def rmse(self, X, y):
+        return -self.score(X, y) * y.std()
+    
+    def nrmse(self, X, y):
+        return -self.score(X, y)
         
     def predict(self, X):
         output = np.array([self.reconstructed_tensor[x[0], x[1], x[2]] for x in X])
@@ -82,10 +91,19 @@ class DINEOF(BaseEstimator):
             mat = mat_hat
 
             pbar.set_postfix(error=new_conv_error, rel_error=abs(new_conv_error - conv_error))
-
-            if (new_conv_error <= self.toliter) or (abs(new_conv_error - conv_error) < self.toliter):
-                break
+            
+            grad_conv_error = abs(new_conv_error - conv_error)
             conv_error = new_conv_error
+            
+            logger.info(f'Error/Relative Error at iteraion {i}: {conv_error}, {grad_conv_error}')
+            
+            if self.early_stopping:
+                break_condition = (conv_error <= self.toliter) or (grad_conv_error < self.toliter)
+            else:
+                break_condition = (conv_error <= self.toliter)
+                
+            if break_condition:              
+                break
 
         energy_per_iter = np.array(energy_per_iter)
 
@@ -105,7 +123,8 @@ class DINEOF(BaseEstimator):
                 setattr(self, f'explained_energy_ratio_{i}', np.array(energy_per_iter[:, i, 2]))
 
         self.final_iter = i
-        self.conv_error = new_conv_error
+        self.conv_error = conv_error
+        self.grad_conv_error = grad_conv_error
         self.reconstructed_tensor = utils.unrectify_mat(mat, spatial_shape=self.tensor_shape[:-1])
         self.singular_values_ = s
         self.ucomponents_ = u

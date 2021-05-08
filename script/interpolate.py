@@ -98,7 +98,7 @@ def _main_atom(config):
         , interpolated_stem=config.interpolated_stem
         , unified_tensor_stem=config.unified_tensor_stem
         , timeline_stem=config.timeline_stem
-        , investigated_obj__threshold=config.investigated_obj__threshold
+        , investigated_obj__threshold=config.investigated_obj__threshold if hasattr(config, 'investigated_obj__threshold') else np.inf
     )
     interp.fit(
         interpolation_strategy=config.interpolation_strategy,

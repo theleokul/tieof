@@ -1,3 +1,19 @@
+tensor_shape: [482, 406, 93]
+satellite_descriptor: '/home/kulikov/dineof3/test/satellite_descriptor.csv' 
+input_stem: Input
+output_stem: Output
+static_grid_stem: static_grid
+interpolated_stem: interpolated
+unified_tensor_stem: unified_tensor
+timeline_stem: timeline
+only_years: null
+random_seed: 2434311
+
+logs: './test/reconstruction_logs'
+trials: 30
+start_trial: 0
+
+
 # Shell command to call GHER DINEOF
 # Details: http://modb.oce.ulg.ac.be/mediawiki/index.php/DINEOF
 dineof_executer: "/home/kulikov/dineof-3.0/dineof"
@@ -31,7 +47,7 @@ tol: 1.0e-8
 # of eofs obtained by the cycle ((eof decomposition <-> truncated reconstruction and
 # replacement of missing data)). An automatic criteria is defined by the following parameter
 # 'itstop' to go faster
-nitemax: 300
+nitemax: 100
 
 # Parameter 'toliter' is a precision criteria defining the threshold of automatic stopping
 # of dineof iterations, once the ratio (rms of successive missing data

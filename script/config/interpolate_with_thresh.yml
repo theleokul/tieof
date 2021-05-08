@@ -2,7 +2,7 @@
 investigated_obj: "chlor_a"
 
 # Shape of the area we want to care about
-shape_file_path: "test/shapes/baikal/baikal.shp"
+shape_file_path: "/home/kulikov/dineof3/test/shapes/baikal/baikal.shp"
 
 fullness_threshold: 0.0
 
