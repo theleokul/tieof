@@ -10,7 +10,7 @@
 module load openmpi intel-compilers
 
 ### es - 5km - thresh2
-$MPIRUN python main3.py -c config/main3_default.yml \
+$MPIRUN python main3_mp.py -c config/main3_default.yml \
     -S seawifs \
     --logs ../test/reconstruction_logs/dineof_es_5kmradius_thresh2_seawifs \
     --interpolated-stem interpolated_5kmradius_thresh2 \
@@ -19,7 +19,7 @@ $MPIRUN python main3.py -c config/main3_default.yml \
     --early-stopping 1
 
 ### es - 5km - no thresh
-$MPIRUN python main3.py -c config/main3_default.yml \
+$MPIRUN python main3_mp.py -c config/main3_default.yml \
     -S seawifs \
     --logs ../test/reconstruction_logs/dineof_es_5kmradius_seawifs \
     --interpolated-stem interpolated_5kmradius \
@@ -28,7 +28,7 @@ $MPIRUN python main3.py -c config/main3_default.yml \
     --early-stopping 1
 
 ### es - 3n - no thresh
-$MPIRUN python main3.py -c config/main3_default.yml \
+$MPIRUN python main3_mp.py -c config/main3_default.yml \
     -S seawifs \
     --logs ../test/reconstruction_logs/dineof_es_3neighbours_seawifs \
     --interpolated-stem interpolated_3neighbours \
