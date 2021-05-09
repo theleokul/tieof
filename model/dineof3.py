@@ -1,6 +1,7 @@
 import os
 import sys
 from functools import reduce
+from typing import List
 
 from tqdm import trange
 from loguru import logger
@@ -75,9 +76,10 @@ class DINEOF3(BaseEstimator):
         energy_per_iter = []
         for i in pbar:
             if self.decomp_type.lower() == 'hooi':
+                ranks = np.repeat(self.R, tensor.ndim) if isinstance(self.R, int) else self.R
                 G, A = tld.partial_tucker(tensor,
-                                          modes=list(range(len(self.R))),
-                                          ranks=self.R,
+                                          modes=list(range(len(ranks))),
+                                          ranks=ranks,
                                           tol=self.tol,
                                           n_iter_max=self.td_iter_max)
             elif self.decomp_type.lower() == 'trunchosvd':
@@ -202,9 +204,10 @@ class DINEOF3(BaseEstimator):
 
     def trunc_hosvd(self, tensor):
         A = []
+        ranks = np.repeat(self.R, tensor.ndim) if isinstance(self.R, int) else self.R
         for i in range(tensor.ndim):
             unfold_i = tl.unfold(tensor, i)
-            u, _, _ = svds(unfold_i, k=self.R[i], tol=self.tol)
+            u, _, _ = svds(unfold_i, k=ranks[i], tol=self.tol)
             A.append(u)
         A = np.array(A)
         G = tl.tenalg.multi_mode_dot(tensor, A, transpose=True)
