@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument('-R', '--rank', type=int, help='Rank to use in the decomposition algorithm', default=None)
     parser.add_argument('-L', '--length', type=int, help='Validation length', default=None)
     parser.add_argument('--tensor-shape', nargs=3, type=int, help='Tensor shape', default=None)
-    parser.add_argument('--decomposition-method', type=str, help='truncSVD, truncHOSVD, HOOI or PARAFAC', default=None)
+    parser.add_argument('--decomposition-method', type=str, help='DINEOF, truncSVD, truncHOSVD, HOOI or PARAFAC', default=None)
     parser.add_argument('--nitemax', type=int, default=None)
     parser.add_argument('--refit', type=bool, default=None)
     parser.add_argument('--lat-lon-sep-centering', type=bool, default=None)
@@ -107,12 +107,13 @@ def parse_args():
 
 
 def get_model(args, R):
-    if args.decomposition_method.lower() == 'truncsvd':
+    if args.decomposition_method.lower() == 'dineof':
         d = DINEOF(
             R=R
             , tensor_shape=args.tensor_shape
             , nitemax=args.nitemax
             , mask=args.mask
+            , early_stopping=bool(args.early_stopping)
         )
     else:
         d = DINEOF3(
@@ -120,9 +121,9 @@ def get_model(args, R):
             , tensor_shape=args.tensor_shape
             , decomp_type=args.decomposition_method
             , nitemax=args.nitemax
-            , lat_lon_sep_centering=args.lat_lon_sep_centering
+            , lat_lon_sep_centering=bool(args.lat_lon_sep_centering)
             , mask=args.mask
-            , early_stopping=args.early_stopping
+            , early_stopping=bool(args.early_stopping)
         )
     
     return d

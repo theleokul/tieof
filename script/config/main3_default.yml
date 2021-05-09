@@ -8,12 +8,12 @@ random_seed: 2434311
 trials: 30
 start_trial: 0
 val_size: 0.05
-logs: './test/reconstruction_logs'
+logs: '../test/reconstruction_logs'
 refit: False
 lat_lon_sep_centering: False 
 early_stopping: True
 
-satellite_descriptor: '/home/kulikov/dineof3/test/satellite_descriptor.csv' 
+satellite_descriptor: '../test/satellite_descriptor.csv' 
 input_stem: Input
 output_stem: Output
 static_grid_stem: static_grid
