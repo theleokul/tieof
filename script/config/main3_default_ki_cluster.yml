@@ -1,0 +1,23 @@
+first_day: 151
+rank: 5
+length: 6
+tensor_shape: [482, 406, 93]
+decomposition_method: PARAFAC
+nitemax: 100
+random_seed: 2434311
+trials: 30
+start_trial: 0
+val_size: 0.05
+logs: '../test/reconstruction_logs'
+refit: False
+lat_lon_sep_centering: False 
+early_stopping: True
+
+satellite_descriptor: '../test/satellite_descriptor_ki_cluster.csv' 
+input_stem: Input
+output_stem: Output
+static_grid_stem: static_grid
+interpolated_stem: interpolated
+unified_tensor_stem: unified_tensor
+timeline_stem: timeline
+only_years: null
