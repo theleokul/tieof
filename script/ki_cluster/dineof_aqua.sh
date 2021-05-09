@@ -12,26 +12,26 @@ module load openmpi intel-compilers
 ### es - 5km - thresh2
 $MPIRUN python main3.py -c config/main3_default.yml \
     -S aqua \
-    --logs ../test/reconstruction_logs/dineof_es_5kmradius_thresh2_aqua
+    --logs ../test/reconstruction_logs/dineof_es_5kmradius_thresh2_aqua \
     --interpolated-stem interpolated_5kmradius_thresh2 \
     --output-stem Output_5kmradius_thresh2 \
-    --decomposition-method DINEOF
+    --decomposition-method DINEOF \
     --early-stopping 1
 
 ### es - 5km - no thresh
 $MPIRUN python main3.py -c config/main3_default.yml \
     -S aqua \
-    --logs ../test/reconstruction_logs/dineof_es_5kmradius_aqua
+    --logs ../test/reconstruction_logs/dineof_es_5kmradius_aqua \
     --interpolated-stem interpolated_5kmradius \
     --output-stem Output_5kmradius \
-    --decomposition-method DINEOF
+    --decomposition-method DINEOF \
     --early-stopping 1
 
 ### es - 3n - no thresh
 $MPIRUN python main3.py -c config/main3_default.yml \
     -S aqua \
-    --logs ../test/reconstruction_logs/dineof_es_3neighbours_aqua
+    --logs ../test/reconstruction_logs/dineof_es_3neighbours_aqua \
     --interpolated-stem interpolated_3neighbours \
     --output-stem Output_3neighbours \
-    --decomposition-method DINEOF
+    --decomposition-method DINEOF \
     --early-stopping 1
