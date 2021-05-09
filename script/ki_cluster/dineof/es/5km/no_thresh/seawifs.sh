@@ -1,7 +1,7 @@
 #! /bin/bash
 #SBATCH -D /s/ls4/users/leokul01/dineof3/script
 #SBATCH --ntasks 1
-#SBATCH --cpus-per-task 16
+#SBATCH --cpus-per-task 48
 #SBATCH -o %j.out
 #SBATCH -e %j.err
 #SBATCH -t 02-23:59:59

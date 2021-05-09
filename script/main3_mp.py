@@ -151,7 +151,13 @@ def _main_atom(args):
         np.random.seed(args.random_seed)
         biner = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='kmeans')
         stratify_y = biner.fit_transform(y[:, None]).flatten().astype(int)
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
+        try:
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed, stratify=stratify_y)
+        except ValueError:
+            # The least populated class in y has only 1 member, which is too few. 
+            # The minimum number of groups for any class cannot be less than 2. 
+            # Thus we dont use stratify option in that case.
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=args.val_size, random_state=args.random_seed)
         logger.info(f'Train points: {y_train.shape[0]}, val points: {y_val.shape[0]}')
         
         base_stat['train_points_num'] = y_train.shape[0]
