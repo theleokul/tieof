@@ -8,7 +8,7 @@
 #SBATCH -p hpc4-3d
 
 module load openmpi intel-compilers
-export OPENBLAS_NUM_THREADS=8
+export OPENBLAS_NUM_THREADS=4
 
 
 ### es - 3n - no thresh
@@ -17,5 +17,5 @@ $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
     --logs ../test/reconstruction_logs/dineof_es_3neighbours_aqua \
     --interpolated-stem interpolated_3neighbours \
     --output-stem Output_3neighbours \
-    --decomposition-method DINEOF \
+    --decomposition-method PARAFAC \
     --early-stopping 1
