@@ -8,7 +8,7 @@
 #SBATCH -p hpc4-3d
 
 module load openmpi intel-compilers
-export OPENBLAS_NUM_THREADS=4
+export OPENBLAS_NUM_THREADS=8
 
 ### es - 5km - thresh2
 $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
