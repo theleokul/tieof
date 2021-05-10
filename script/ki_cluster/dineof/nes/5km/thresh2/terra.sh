@@ -13,7 +13,7 @@ export OPENBLAS_NUM_THREADS=8
 ### es - 5km - thresh2
 $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
     -S terra \
-    --logs ../test/reconstruction_logs/dineof_es_5kmradius_thresh2_terra \
+    --logs ../test/reconstruction_logs/dineof_nes_5kmradius_thresh2_terra \
     --interpolated-stem interpolated_5kmradius_thresh2 \
     --output-stem Output_5kmradius_thresh2 \
     --decomposition-method DINEOF \

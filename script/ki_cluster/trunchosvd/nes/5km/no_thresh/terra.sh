@@ -13,7 +13,7 @@ export OPENBLAS_NUM_THREADS=1
 ### es - 5km - no thresh
 $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
     -S terra \
-    --logs ../test/reconstruction_logs/dineof_es_5kmradius_terra \
+    --logs ../test/reconstruction_logs/trunchosvd_nes_5kmradius_terra \
     --interpolated-stem interpolated_5kmradius \
     --output-stem Output_5kmradius \
     --decomposition-method trunchosvd \

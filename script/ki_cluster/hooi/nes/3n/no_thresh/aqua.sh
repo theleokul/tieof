@@ -14,7 +14,7 @@ export OPENBLAS_NUM_THREADS=2
 ### es - 3n - no thresh
 $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
     -S aqua \
-    --logs ../test/reconstruction_logs/dineof_es_3neighbours_aqua \
+    --logs ../test/reconstruction_logs/hooi_nes_3neighbours_aqua \
     --interpolated-stem interpolated_3neighbours \
     --output-stem Output_3neighbours \
     --decomposition-method hooi \

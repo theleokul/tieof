@@ -14,7 +14,7 @@ export OPENBLAS_NUM_THREADS=2
 ### es - 3n - no thresh
 $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
     -S seawifs \
-    --logs ../test/reconstruction_logs/dineof_es_3neighbours_seawifs \
+    --logs ../test/reconstruction_logs/trunchosvd_nes_3neighbours_seawifs \
     --interpolated-stem interpolated_3neighbours \
     --output-stem Output_3neighbours \
     --decomposition-method trunchosvd \
