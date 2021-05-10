@@ -87,3 +87,7 @@ def bootstrap(*arrays, rng=None, keep_unique_only=True):
         output = new_arrays[0]
         
     return output
+
+
+def str2bool(v):
+    return v.lower() in ("yes", "y", "true", "t", "1")
