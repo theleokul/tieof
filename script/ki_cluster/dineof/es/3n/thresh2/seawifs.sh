@@ -13,6 +13,7 @@ export OPENBLAS_NUM_THREADS=8
 
 ### es - 3n - no thresh
 $MPIRUN python main3_mp.py -c config/main3_default_ki_cluster.yml \
+    --satellite-descriptor '../test/satellite_descriptor_ki_cluster_w3nt2.csv' \
     -S seawifs \
     --logs ../test/reconstruction_logs/dineof_es_3neighbours_thresh2_seawifs \
     --interpolated-stem interpolated_3neighbours_thresh2 \
