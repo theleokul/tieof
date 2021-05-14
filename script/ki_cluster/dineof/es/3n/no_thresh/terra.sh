@@ -8,7 +8,7 @@
 #SBATCH -p hpc4-3d
 
 module load openmpi intel-compilers
-export OPENBLAS_NUM_THREADS=8
+export OPENBLAS_NUM_THREADS=1
 
 
 ### es - 3n - no thresh
