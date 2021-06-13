@@ -20,7 +20,7 @@ def load_config(config_path):
     return config
 
 
-def parse_satellite(base_dir, input_stem, output_stem=None, only_years=None):
+def parse_satellite(base_dir, input_stem=None, output_stem=None, only_years=None):
     """Get input and output dirs from a specified satellite's base_dir"""
     years = os.listdir(base_dir)
 
@@ -31,14 +31,20 @@ def parse_satellite(base_dir, input_stem, output_stem=None, only_years=None):
     if only_years is not None:
         years = [y for y in years if y in only_years]
 
-    input_dirs = [os.path.join(base_dir, y, input_stem) for y in years]
-
-    output = input_dirs
+    assert input_stem is not None or output_stem is not None
+    
+    output = None
+    if input_stem is not None:
+        input_dirs = [os.path.join(base_dir, y, input_stem) for y in years]
+        output = input_dirs
     if output_stem is not None:
         output_dirs = [os.path.join(base_dir, y, output_stem) for y in years]
         for o in output_dirs:
             os.makedirs(o, exist_ok=True)
-        output = input_dirs, output_dirs
+        if output is not None:
+            output = output, output_dirs
+        else:
+            output = output_dirs
 
     return output
 
@@ -75,9 +81,18 @@ def bootstrap(*arrays, rng=None, keep_unique_only=True):
         
     nb_examples = arrays[0].shape[0]
     
+    orig_inds = [0, 1, 2, 3, 4, 5]    
+    
+    
     bootstrapped_inds = rng.randint(0, nb_examples, size=nb_examples)
+    
+    t_inds = [0, 0, 2, 3, 5, 5]
+    
+    
     if keep_unique_only:
         bootstrapped_inds = np.unique(bootstrapped_inds)
+        
+    t_inds = [0, 2, 3, 5]
     
     new_arrays = [arr[bootstrapped_inds] for arr in arrays]
     
