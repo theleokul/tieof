@@ -3,10 +3,10 @@ __pycache__
 .pytest_cache
 venv
 .idea
-*.png
+# *.png
 *.log
 *.txt
-*.csv
+# *.csv
 *.sh
 octave-workspace
 .vscode

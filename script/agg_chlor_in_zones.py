@@ -34,7 +34,7 @@ def parse_args() -> T.Union[ap.Namespace, T.List[ap.Namespace]]:
     parser.add_argument('--satellite-descriptor'
                         , type=str
                         , help='Path to .csv file with key-value pairs that maps satellites to base dirs'
-                        , default='/home/kulikov/dineof3/test/satellite_descriptor.csv')
+                        , default='../supp/satellite_descriptor.csv')
     parser.add_argument('--only-years', type=str, nargs='+', default=None)
     parser.add_argument('--output-stem', type=str, default='Output_5kmradius_thresh2')
     parser.add_argument('--unified-tensor-re', type=str, default=r'^unified_tensor_hooi_10_\d.\d{4}.npy$')

@@ -1,0 +1,4 @@
+satellite,base_dir
+aqua,/mss3/baikal/kulikov/modis_aqua
+terra,/mss3/baikal/kulikov/modis_terra
+seawifs,/mss3/baikal/kulikov/seawifs

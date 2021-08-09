@@ -79,20 +79,11 @@ def bootstrap(*arrays, rng=None, keep_unique_only=True):
     if rng is None:
         rng = np.random
         
-    nb_examples = arrays[0].shape[0]
-    
-    orig_inds = [0, 1, 2, 3, 4, 5]    
-    
-    
+    nb_examples = arrays[0].shape[0]    
     bootstrapped_inds = rng.randint(0, nb_examples, size=nb_examples)
-    
-    t_inds = [0, 0, 2, 3, 5, 5]
-    
     
     if keep_unique_only:
         bootstrapped_inds = np.unique(bootstrapped_inds)
-        
-    t_inds = [0, 2, 3, 5]
     
     new_arrays = [arr[bootstrapped_inds] for arr in arrays]
     

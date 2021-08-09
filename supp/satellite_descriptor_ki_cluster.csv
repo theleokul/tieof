@@ -1,0 +1,4 @@
+satellite,base_dir
+aqua,/s/ls4/users/leokul01/satellite_data/modis_aqua
+terra,/s/ls4/users/leokul01/satellite_data/modis_terra
+seawifs,/s/ls4/users/leokul01/satellite_data/seawifs
