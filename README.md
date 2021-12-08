@@ -2,7 +2,9 @@
 
 ## Status
 
-Submission of the [paper](supp/tieof_paper.pdf) to [MDPI Water](https://www.mdpi.com/journal/water).
+Published in [MDPI Water](https://www.mdpi.com/journal/water)
+
+[paper](https://www.mdpi.com/2073-4441/13/18/2578) 
 
 ## Description
 
