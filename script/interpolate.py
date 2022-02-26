@@ -60,6 +60,9 @@ def parse_args() -> T.Union[ap.Namespace, T.List[ap.Namespace]]:
         setattr(config, 'timeline_stem', args.timeline_stem)
     if args.interpolation_strategy is not None:
         setattr(config, 'interpolation_strategy', args.interpolation_strategy)
+    if args.only_years is not None:
+        setattr(config, 'only_years', args.only_years)
+        
     if args.satellite is not None:
         assert args.satellite_descriptor is not None
         df = pd.read_csv(args.satellite_descriptor)
@@ -67,7 +70,7 @@ def parse_args() -> T.Union[ap.Namespace, T.List[ap.Namespace]]:
         input_dirs = \
             sutils.parse_satellite(satellite_base_dir
                                    , input_stem=args.input_stem
-                                   , only_years=args.only_years)
+                                   , only_years=config.only_years)
 
         base_config = copy.deepcopy(config)
         config = []
